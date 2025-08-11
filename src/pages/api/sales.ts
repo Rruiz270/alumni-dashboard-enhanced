@@ -19,9 +19,15 @@ export default async function handler(
     const client = new VindiClient();
     const { startDate, endDate } = req.query;
 
+    // Convert dates from YYYY-MM-DD to the format expected by Vindi API
+    const formattedStartDate = startDate ? (startDate as string) : undefined;
+    const formattedEndDate = endDate ? (endDate as string) : undefined;
+
+    console.log('Fetching bills with dates:', { startDate: formattedStartDate, endDate: formattedEndDate });
+
     const bills = await client.fetchBills(
-      startDate as string,
-      endDate as string
+      formattedStartDate,
+      formattedEndDate
     );
 
     const charges = await client.fetchCharges();

@@ -31,8 +31,12 @@ export class VindiClient {
         page: 1,
       };
 
-      if (startDate) {
+      if (startDate && endDate) {
+        params.query = `created_at:>=${startDate} created_at:<=${endDate}`;
+      } else if (startDate) {
         params.query = `created_at:>=${startDate}`;
+      } else if (endDate) {
+        params.query = `created_at:<=${endDate}`;
       }
 
       const response = await axios.get(`${this.baseURL}/bills`, {

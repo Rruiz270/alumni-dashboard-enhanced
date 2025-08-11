@@ -7,6 +7,7 @@ export default function CustomerDashboard() {
   const [summary, setSummary] = useState<PaymentSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [filter, setFilter] = useState('all');
@@ -20,13 +21,14 @@ export default function CustomerDashboard() {
       if (startDate) params.append('startDate', startDate);
       if (endDate) params.append('endDate', endDate);
       
-      const response = await fetch(`/api/customer-analysis?${params}`);
+      const response = await fetch(`/api/customer-analysis-simple?${params}`);
       const data = await response.json();
       
       if (!response.ok) throw new Error(data.error);
       
       setCustomers(data.customers);
       setSummary(data.summary);
+      setMessage(data.message || '');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch customer analysis');
     } finally {
@@ -123,6 +125,7 @@ export default function CustomerDashboard() {
       </div>
 
       {error && <div className="error">{error}</div>}
+      {message && <div className="info">{message}</div>}
 
       {summary && (
         <div className="summary-grid">
@@ -296,6 +299,14 @@ export default function CustomerDashboard() {
         .error {
           background-color: #fee;
           color: #c00;
+          padding: 10px;
+          border-radius: 4px;
+          margin-bottom: 20px;
+        }
+
+        .info {
+          background-color: #e7f3ff;
+          color: #0070f3;
           padding: 10px;
           border-radius: 4px;
           margin-bottom: 20px;

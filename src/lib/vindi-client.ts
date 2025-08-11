@@ -68,6 +68,11 @@ export class VindiClient {
         }
         
         page++;
+        
+        // Add delay between requests to avoid rate limiting
+        if (page > 2) {
+          await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
+        }
       }
 
       console.log(`Fetched ${allBills.length} bills total`);

@@ -20,29 +20,23 @@ export default async function handler(
     const analysisService = new CustomerAnalysisService();
     const { startDate, endDate } = req.query;
 
-    // Convert dates from YYYY-MM-DD to the format expected by Vindi API
-    const formattedStartDate = startDate ? (startDate as string) : undefined;
-    const formattedEndDate = endDate ? (endDate as string) : undefined;
+    console.log('Fetching bills for simple customer analysis:', { startDate, endDate });
 
-    console.log('Fetching bills for customer analysis:', { startDate: formattedStartDate, endDate: formattedEndDate });
-
-    // Fetch fewer records to avoid rate limiting (up to 100)
+    // Fetch only one page to avoid rate limiting
     const bills = await client.fetchBills(
-      formattedStartDate,
-      formattedEndDate,
-      100
+      startDate as string,
+      endDate as string,
+      50 // Reduced limit
     );
 
-    // Skip charges fetch to reduce API calls - use charges from bills
-    const charges: any[] = [];
-    const chargeMap = new Map(charges.map((c: any) => [c.bill_id, c]));
+    console.log(`Fetched ${bills.length} bills`);
 
     const sales = [];
 
-    // Use basic customer data from bills (don't fetch full customer details to avoid rate limiting)
+    // Use only data already available in bills
     for (const bill of bills) {
       const customer = bill.customer;
-      const charge = chargeMap.get(bill.id) || bill.charges?.[0];
+      const charge = bill.charges?.[0]; // Use charge from bill
       
       if (customer) {
         const sale = client.transformToSale(bill, customer, charge);
@@ -50,23 +44,27 @@ export default async function handler(
       }
     }
 
-    console.log(`Processed ${bills.length} bills into ${sales.length} sales`);
+    console.log(`Processed ${sales.length} sales`);
 
-    // TODO: Fetch spreadsheet data (for now using empty array)
-    const spreadsheetData: any[] = [];
-
-    // Analyze customer payments
-    const customerAnalyses = analysisService.analyzeCustomerPayments(sales, spreadsheetData);
+    // Analyze customer payments (without spreadsheet data for now)
+    const customerAnalyses = analysisService.analyzeCustomerPayments(sales, []);
     const summary = analysisService.generateSummary(customerAnalyses);
 
     res.status(200).json({ 
       customers: customerAnalyses,
       summary,
-      total: customerAnalyses.length
+      total: customerAnalyses.length,
+      message: 'Dados limitados para evitar limite de requisições'
     });
   } catch (error: any) {
     console.error('API Error:', error);
-    console.error('Error details:', error.response?.data || error.message);
+    
+    if (error.response?.status === 429) {
+      return res.status(429).json({
+        error: 'Limite de requisições atingido. Tente novamente em alguns minutos.',
+        retryAfter: '5 minutes'
+      });
+    }
     
     const errorMessage = error.response?.data?.errors?.[0]?.message || 
                         error.response?.data?.message || 

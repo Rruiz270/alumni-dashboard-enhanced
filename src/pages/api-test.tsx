@@ -4,6 +4,8 @@ import Link from 'next/link';
 export default function ApiTest() {
   const [startDate, setStartDate] = useState('2025-08-01');
   const [endDate, setEndDate] = useState('2025-08-11');
+  const [installmentStartDate, setInstallmentStartDate] = useState('');
+  const [installmentEndDate, setInstallmentEndDate] = useState('');
   const [sheetId, setSheetId] = useState('1YBBwUQHOlOCNmpSA8hdGLKZYpbq4Pwbo3I3tx8U7dW8');
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -14,9 +16,12 @@ export default function ApiTest() {
     
     try {
       const urlParams = new URLSearchParams({
-        startDate,
-        endDate,
+        saleStartDate: startDate,
+        saleEndDate: endDate,
+        ...(installmentStartDate && { installmentStartDate }),
+        ...(installmentEndDate && { installmentEndDate }),
         sheetId,
+        gid: '0',
         ...params
       });
       
@@ -40,14 +45,18 @@ export default function ApiTest() {
     }
   };
 
-  const downloadExcel = () => {
+  const downloadExcel = (endpoint = 'export-excel') => {
     const params = new URLSearchParams({
-      startDate,
-      endDate,
+      saleStartDate: startDate,
+      saleEndDate: endDate,
+      ...(installmentStartDate && { installmentStartDate }),
+      ...(installmentEndDate && { installmentEndDate }),
+      sheetId,
+      gid: '0',
       format: 'excel'
     });
     
-    window.open(`/api/export-excel?${params}`, '_blank');
+    window.open(`/api/${endpoint}?${params}`, '_blank');
   };
 
   return (
@@ -63,31 +72,57 @@ export default function ApiTest() {
         <div>
           <h3>Configurações</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <label>
+                <strong>Data Venda Início:</strong>
+                <input 
+                  type="date" 
+                  value={startDate} 
+                  onChange={(e) => setStartDate(e.target.value)}
+                  style={{ marginLeft: '10px', padding: '5px', width: '100%' }}
+                />
+              </label>
+              <label>
+                <strong>Data Venda Fim:</strong>
+                <input 
+                  type="date" 
+                  value={endDate} 
+                  onChange={(e) => setEndDate(e.target.value)}
+                  style={{ marginLeft: '10px', padding: '5px', width: '100%' }}
+                />
+              </label>
+            </div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <label>
+                <strong>Data Parcela Início:</strong>
+                <input 
+                  type="date" 
+                  value={installmentStartDate} 
+                  onChange={(e) => setInstallmentStartDate(e.target.value)}
+                  style={{ marginLeft: '10px', padding: '5px', width: '100%' }}
+                  placeholder="Opcional"
+                />
+              </label>
+              <label>
+                <strong>Data Parcela Fim:</strong>
+                <input 
+                  type="date" 
+                  value={installmentEndDate} 
+                  onChange={(e) => setInstallmentEndDate(e.target.value)}
+                  style={{ marginLeft: '10px', padding: '5px', width: '100%' }}
+                  placeholder="Opcional"
+                />
+              </label>
+            </div>
+            
             <label>
-              Data Início:
-              <input 
-                type="date" 
-                value={startDate} 
-                onChange={(e) => setStartDate(e.target.value)}
-                style={{ marginLeft: '10px', padding: '5px' }}
-              />
-            </label>
-            <label>
-              Data Fim:
-              <input 
-                type="date" 
-                value={endDate} 
-                onChange={(e) => setEndDate(e.target.value)}
-                style={{ marginLeft: '10px', padding: '5px' }}
-              />
-            </label>
-            <label>
-              Google Sheets ID:
+              <strong>Google Sheets ID:</strong>
               <input 
                 type="text" 
                 value={sheetId} 
                 onChange={(e) => setSheetId(e.target.value)}
-                style={{ marginLeft: '10px', padding: '5px', width: '300px' }}
+                style={{ marginLeft: '10px', padding: '5px', width: '100%' }}
               />
             </label>
           </div>
@@ -97,32 +132,39 @@ export default function ApiTest() {
           <h3>Testes de API</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <button 
-              onClick={() => testEndpoint('export-excel')} 
+              onClick={() => testEndpoint('debug-crossmatch')} 
+              disabled={loading}
+              style={{ padding: '8px 16px', backgroundColor: '#e83e8c', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+            >
+              🐛 Debug Crossmatch
+            </button>
+            <button 
+              onClick={() => testEndpoint('export-advanced')} 
               disabled={loading}
               style={{ padding: '8px 16px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
             >
-              Testar Dados JSON
+              📊 Dados Avançados JSON
             </button>
             <button 
-              onClick={downloadExcel} 
+              onClick={() => downloadExcel('export-advanced')} 
               disabled={loading}
               style={{ padding: '8px 16px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
             >
-              Baixar Excel
+              📁 Excel com Parcelas
             </button>
             <button 
               onClick={() => testEndpoint('google-sheets')} 
               disabled={loading}
               style={{ padding: '8px 16px', backgroundColor: '#ffc107', color: 'black', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
             >
-              Testar Google Sheets
+              📋 Testar Google Sheets
             </button>
             <button 
               onClick={() => testEndpoint('compare-data')} 
               disabled={loading}
               style={{ padding: '8px 16px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
             >
-              Comparar Vindi vs Sheets
+              🔄 Comparar Dados
             </button>
           </div>
         </div>
@@ -147,13 +189,47 @@ export default function ApiTest() {
             Status: {result.status} - {result.success ? 'Sucesso' : 'Erro'}
           </div>
           
+          {/* Special display for customer data with installment dropdown */}
+          {result.success && result.data && result.data.customers && (
+            <div style={{ marginBottom: '20px' }}>
+              <h4>Clientes com Detalhes de Parcelas:</h4>
+              <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #ddd', padding: '10px' }}>
+                {result.data.customers.slice(0, 10).map((customer: any, index: number) => (
+                  <details key={index} style={{ marginBottom: '10px', border: '1px solid #eee', padding: '10px', borderRadius: '5px' }}>
+                    <summary style={{ cursor: 'pointer', fontWeight: 'bold', color: '#0070f3' }}>
+                      {customer.nome} ({customer.cpf_cnpj}) - {customer.allTransactions.length} transação(ões)
+                    </summary>
+                    <div style={{ marginTop: '10px', fontSize: '12px' }}>
+                      <p><strong>Status:</strong> {customer.isUpToDate ? '✅ Em Dia' : customer.isDelinquent ? '❌ Inadimplente' : '⚠️ Pendente'}</p>
+                      <p><strong>Encontrado na Planilha:</strong> {customer.spreadsheetData ? '✅ Sim' : '❌ Não'}</p>
+                      {customer.inconsistencies.length > 0 && (
+                        <p><strong>Inconsistências:</strong> {customer.inconsistencies.join(', ')}</p>
+                      )}
+                      <h5>Todas as Transações:</h5>
+                      <ul>
+                        {customer.allTransactions.map((transaction: any, tIndex: number) => (
+                          <li key={tIndex} style={{ marginBottom: '5px' }}>
+                            📅 {transaction.data_transacao} | 
+                            💰 R$ {transaction.valor_total.toFixed(2)} | 
+                            🔢 {transaction.parcelas}x | 
+                            🏷️ {transaction.produto}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </details>
+                ))}
+              </div>
+            </div>
+          )}
+          
           <pre style={{ 
             backgroundColor: '#f8f9fa', 
             padding: '15px', 
             borderRadius: '5px', 
             overflow: 'auto',
-            maxHeight: '500px',
-            fontSize: '12px'
+            maxHeight: '400px',
+            fontSize: '11px'
           }}>
             {JSON.stringify(result.data || result.error, null, 2)}
           </pre>

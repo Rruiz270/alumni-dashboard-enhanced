@@ -12,10 +12,10 @@ export class CustomerAnalysisService {
     
     const analyses: CustomerPaymentAnalysis[] = [];
     
-    for (const [cpfCnpj, customerSales] of customerGroups) {
+    customerGroups.forEach((customerSales, cpfCnpj) => {
       const analysis = this.analyzeCustomer(cpfCnpj, customerSales, spreadsheetData);
       analyses.push(analysis);
-    }
+    });
     
     return analyses.sort((a, b) => 
       new Date(b.firstTransactionDate).getTime() - new Date(a.firstTransactionDate).getTime()

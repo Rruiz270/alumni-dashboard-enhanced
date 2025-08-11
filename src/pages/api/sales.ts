@@ -36,14 +36,17 @@ export default async function handler(
     const sales: Sale[] = [];
 
     for (const bill of bills) {
-      const customer = await client.fetchCustomer(bill.customer_id);
-      const charge = chargeMap.get(bill.id);
+      // Customer data is already included in the bill response
+      const customer = bill.customer;
+      const charge = chargeMap.get(bill.id) || bill.charges?.[0];
       
       if (customer) {
         const sale = client.transformToSale(bill, customer, charge);
         sales.push(sale);
       }
     }
+    
+    console.log(`Processed ${bills.length} bills into ${sales.length} sales`);
 
     res.status(200).json({ sales, total: sales.length });
   } catch (error: any) {

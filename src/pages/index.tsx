@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Sale } from '../types/sale';
 
 export default function Dashboard() {
@@ -48,7 +49,12 @@ export default function Dashboard() {
 
   return (
     <div className="container">
-      <h1>Dashboard de Vendas - Better Education</h1>
+      <div className="header">
+        <h1>Dashboard de Vendas - Better Education</h1>
+        <Link href="/dashboard" className="link-button">
+          Ver Análise de Clientes →
+        </Link>
+      </div>
       
       <div className="filters">
         <div className="filter-group">
@@ -147,9 +153,28 @@ export default function Dashboard() {
           max-width: 100%;
         }
 
-        h1 {
-          color: #333;
+        .header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
           margin-bottom: 30px;
+        }
+
+        .header h1 {
+          color: #333;
+          margin: 0;
+        }
+
+        .link-button {
+          padding: 8px 16px;
+          background-color: #28a745;
+          color: white;
+          text-decoration: none;
+          border-radius: 4px;
+        }
+
+        .link-button:hover {
+          background-color: #218838;
         }
 
         .filters {

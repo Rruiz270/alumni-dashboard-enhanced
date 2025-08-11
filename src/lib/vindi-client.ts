@@ -24,37 +24,54 @@ export class VindiClient {
     };
   }
 
-  async fetchBills(startDate?: string, endDate?: string) {
+  async fetchBills(startDate?: string, endDate?: string, limit: number = 200) {
     try {
-      const params: any = {
-        per_page: 100,
-        page: 1,
-        sort_by: 'created_at',
-        sort_order: 'desc'
-      };
-
-      // Build query for date filtering
-      let queryParts: string[] = [];
+      const allBills: any[] = [];
+      let page = 1;
+      const perPage = 100; // Vindi's max per page
       
-      if (startDate) {
-        queryParts.push(`created_at:>=${startDate}`);
-      }
-      if (endDate) {
-        queryParts.push(`created_at:<=${endDate}`);
-      }
-      
-      if (queryParts.length > 0) {
-        params.query = queryParts.join(' AND ');
-      }
-      
-      console.log('Fetching bills with params:', params);
+      while (allBills.length < limit) {
+        const params: any = {
+          per_page: perPage,
+          page: page,
+          sort_by: 'created_at',
+          sort_order: 'desc'
+        };
 
-      const response = await axios.get(`${this.baseURL}/bills`, {
-        headers: this.getHeaders(),
-        params,
-      });
+        // Build query for date filtering
+        let queryParts: string[] = [];
+        
+        if (startDate) {
+          queryParts.push(`created_at:>=${startDate}`);
+        }
+        if (endDate) {
+          queryParts.push(`created_at:<=${endDate}`);
+        }
+        
+        if (queryParts.length > 0) {
+          params.query = queryParts.join(' AND ');
+        }
+        
+        console.log(`Fetching bills page ${page} with params:`, params);
 
-      return response.data.bills || [];
+        const response = await axios.get(`${this.baseURL}/bills`, {
+          headers: this.getHeaders(),
+          params,
+        });
+
+        const bills = response.data.bills || [];
+        allBills.push(...bills);
+        
+        // If we got fewer bills than requested per page, we've reached the end
+        if (bills.length < perPage) {
+          break;
+        }
+        
+        page++;
+      }
+
+      console.log(`Fetched ${allBills.length} bills total`);
+      return allBills.slice(0, limit);
     } catch (error) {
       console.error('Error fetching bills:', error);
       throw error;
@@ -138,16 +155,37 @@ export class VindiClient {
   }
 
   private calculateProductValue(bill: any): number {
-    if (!bill.bill_items) return 0;
-    return bill.bill_items
-      .filter((item: any) => item.product_item_type === 'product')
-      .reduce((sum: number, item: any) => sum + parseFloat(item.amount || 0), 0);
+    if (!bill.bill_items) return parseFloat(bill.amount || 0) / 2; // Split evenly as fallback
+    
+    // Check if items have product_item_type
+    const productItems = bill.bill_items.filter((item: any) => 
+      item.product_item_type === 'product' || 
+      item.product?.name?.includes('Material') ||
+      item.description?.includes('material')
+    );
+    
+    if (productItems.length > 0) {
+      return productItems.reduce((sum: number, item: any) => sum + parseFloat(item.amount || 0), 0);
+    }
+    
+    // If no clear product items, assume half is product
+    return parseFloat(bill.amount || 0) / 2;
   }
 
   private calculateServiceValue(bill: any): number {
-    if (!bill.bill_items) return 0;
-    return bill.bill_items
-      .filter((item: any) => item.product_item_type === 'service')
-      .reduce((sum: number, item: any) => sum + parseFloat(item.amount || 0), 0);
+    if (!bill.bill_items) return parseFloat(bill.amount || 0) / 2; // Split evenly as fallback
+    
+    // Check if items have product_item_type
+    const serviceItems = bill.bill_items.filter((item: any) => 
+      item.product_item_type === 'service' ||
+      (!item.product?.name?.includes('Material') && !item.description?.includes('material'))
+    );
+    
+    if (serviceItems.length > 0) {
+      return serviceItems.reduce((sum: number, item: any) => sum + parseFloat(item.amount || 0), 0);
+    }
+    
+    // If no clear service items, assume half is service
+    return parseFloat(bill.amount || 0) / 2;
   }
 }

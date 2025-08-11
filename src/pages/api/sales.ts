@@ -25,9 +25,11 @@ export default async function handler(
 
     console.log('Fetching bills with dates:', { startDate: formattedStartDate, endDate: formattedEndDate });
 
+    // Fetch more records (up to 500 for better data coverage)
     const bills = await client.fetchBills(
       formattedStartDate,
-      formattedEndDate
+      formattedEndDate,
+      500
     );
 
     const charges = await client.fetchCharges();
@@ -36,13 +38,25 @@ export default async function handler(
     const sales: Sale[] = [];
 
     for (const bill of bills) {
-      // Customer data is already included in the bill response
-      const customer = bill.customer;
-      const charge = chargeMap.get(bill.id) || bill.charges?.[0];
-      
-      if (customer) {
-        const sale = client.transformToSale(bill, customer, charge);
-        sales.push(sale);
+      try {
+        // Get full customer details (bill.customer has limited data)
+        const fullCustomer = await client.fetchCustomer(bill.customer.id);
+        const customer = fullCustomer || bill.customer;
+        const charge = chargeMap.get(bill.id) || bill.charges?.[0];
+        
+        if (customer) {
+          const sale = client.transformToSale(bill, customer, charge);
+          sales.push(sale);
+        }
+      } catch (error) {
+        console.error(`Error processing bill ${bill.id}:`, error);
+        // Use basic customer data if full fetch fails
+        const customer = bill.customer;
+        const charge = chargeMap.get(bill.id) || bill.charges?.[0];
+        if (customer) {
+          const sale = client.transformToSale(bill, customer, charge);
+          sales.push(sale);
+        }
       }
     }
     

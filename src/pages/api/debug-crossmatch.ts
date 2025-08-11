@@ -36,6 +36,18 @@ export default async function handler(
       const customer = bill.customer;
       const charge = bill.charges?.[0];
       
+      // Log estrutura completa da primeira bill
+      if (vindiSales.length === 0) {
+        console.log('Estrutura completa da primeira bill:', {
+          bill_id: bill.id,
+          bill_keys: Object.keys(bill),
+          customer_keys: customer ? Object.keys(customer) : null,
+          charge_keys: charge ? Object.keys(charge) : null,
+          bill_customer: bill.customer,
+          full_bill_sample: bill
+        });
+      }
+      
       if (customer) {
         const sale = client.transformToSale(bill, customer, charge);
         vindiSales.push(sale);
@@ -44,9 +56,14 @@ export default async function handler(
         if (vindiSales.length <= 3) {
           console.log(`Venda ${vindiSales.length}:`, {
             nome: sale.nome,
+            customer_full: customer,
             cpf_cnpj_original: customer.registry_code,
             cpf_cnpj_processado: sale.cpf_cnpj,
-            cpf_normalizado: (sale.cpf_cnpj || '').replace(/[.\-\/\s]/g, '')
+            cpf_normalizado: (sale.cpf_cnpj || '').replace(/[.\-\/\s]/g, ''),
+            // Outros campos possíveis onde pode estar o CPF
+            customer_code: customer.code,
+            customer_email: customer.email,
+            customer_metadata: customer.metadata
           });
         }
       }

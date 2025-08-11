@@ -122,9 +122,12 @@ export class VindiClient {
   }
 
   transformToSale(bill: any, customer: any, charge?: any): Sale {
+    // Busca CPF/CNPJ em vários locais possíveis
+    const cpf_cnpj = this.extractCpfCnpj(customer, bill);
+    
     return {
       documento: bill.code || '',
-      cpf_cnpj: customer?.registry_code || '',
+      cpf_cnpj: cpf_cnpj,
       nome: customer?.name || '',
       cliente: customer?.name || '',
       celular: customer?.phones?.[0]?.number || '',
@@ -192,5 +195,44 @@ export class VindiClient {
     
     // If no clear service items, assume half is service
     return parseFloat(bill.amount || 0) / 2;
+  }
+
+  /**
+   * Extrai CPF/CNPJ de vários locais possíveis nos dados do Vindi
+   */
+  private extractCpfCnpj(customer: any, bill: any): string {
+    // Lista de locais onde o CPF/CNPJ pode estar
+    const possibleLocations = [
+      { key: 'customer.registry_code', value: customer?.registry_code },
+      { key: 'customer.document', value: customer?.document },
+      { key: 'customer.cpf', value: customer?.cpf },
+      { key: 'customer.cnpj', value: customer?.cnpj },
+      { key: 'customer.cpf_cnpj', value: customer?.cpf_cnpj },
+      { key: 'customer.tax_id', value: customer?.tax_id },
+      { key: 'customer.metadata.cpf', value: customer?.metadata?.cpf },
+      { key: 'customer.metadata.cnpj', value: customer?.metadata?.cnpj },
+      { key: 'customer.metadata.document', value: customer?.metadata?.document },
+      { key: 'bill.customer.registry_code', value: bill?.customer?.registry_code },
+      { key: 'bill.customer.document', value: bill?.customer?.document },
+      { key: 'bill.payment_profile.registry_code', value: bill?.payment_profile?.registry_code },
+      { key: 'bill.charges[0].payment_profile.registry_code', value: bill?.charges?.[0]?.payment_profile?.registry_code }
+    ];
+
+    // Debug: log all possible locations for first few records
+    if (Math.random() < 0.1) { // Only log 10% of records to avoid spam
+      console.log('CPF/CNPJ search locations:', possibleLocations.map(loc => `${loc.key}: ${loc.value}`));
+    }
+
+    // Retorna o primeiro valor não vazio encontrado
+    for (const location of possibleLocations) {
+      if (location.value && typeof location.value === 'string' && location.value.trim()) {
+        if (Math.random() < 0.1) {
+          console.log(`CPF/CNPJ encontrado em: ${location.key} = ${location.value}`);
+        }
+        return location.value.trim();
+      }
+    }
+
+    return '';
   }
 }

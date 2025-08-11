@@ -15,9 +15,12 @@ export class VindiClient {
   }
 
   private getHeaders() {
+    // Vindi uses the API key as username with empty password
+    const auth = Buffer.from(`${this.apiKey}:`).toString('base64');
     return {
-      'Authorization': `Basic ${Buffer.from(`${this.apiKey}:`).toString('base64')}`,
+      'Authorization': `Basic ${auth}`,
       'Content-Type': 'application/json',
+      'Accept': 'application/json',
     };
   }
 

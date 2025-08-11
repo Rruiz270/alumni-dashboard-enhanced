@@ -8,6 +8,10 @@ export class VindiClient {
   constructor() {
     this.apiKey = process.env.VINDI_API_KEY || '';
     this.baseURL = process.env.VINDI_API_URL || 'https://app.vindi.com.br/api/v1';
+    
+    if (!this.apiKey) {
+      throw new Error('VINDI_API_KEY is not configured');
+    }
   }
 
   private getHeaders() {

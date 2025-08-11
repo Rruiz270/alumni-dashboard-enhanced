@@ -6,6 +6,11 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  // Add CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -35,8 +40,18 @@ export default async function handler(
     }
 
     res.status(200).json({ sales, total: sales.length });
-  } catch (error) {
+  } catch (error: any) {
     console.error('API Error:', error);
-    res.status(500).json({ error: 'Failed to fetch sales data' });
+    console.error('Error details:', error.response?.data || error.message);
+    
+    const errorMessage = error.response?.data?.errors?.[0]?.message || 
+                        error.response?.data?.message || 
+                        error.message || 
+                        'Failed to fetch sales data';
+    
+    res.status(500).json({ 
+      error: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? error.toString() : undefined
+    });
   }
 }

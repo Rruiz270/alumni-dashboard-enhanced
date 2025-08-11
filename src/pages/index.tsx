@@ -58,6 +58,7 @@ export default function Dashboard() {
             id="startDate"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
+            placeholder="yyyy-mm-dd"
           />
         </div>
         
@@ -68,6 +69,7 @@ export default function Dashboard() {
             id="endDate"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
+            placeholder="yyyy-mm-dd"
           />
         </div>
         

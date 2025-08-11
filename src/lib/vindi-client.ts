@@ -29,15 +29,25 @@ export class VindiClient {
       const params: any = {
         per_page: 100,
         page: 1,
+        sort_by: 'created_at',
+        sort_order: 'desc'
       };
 
-      if (startDate && endDate) {
-        params.query = `created_at:>=${startDate} created_at:<=${endDate}`;
-      } else if (startDate) {
-        params.query = `created_at:>=${startDate}`;
-      } else if (endDate) {
-        params.query = `created_at:<=${endDate}`;
+      // Build query for date filtering
+      let queryParts: string[] = [];
+      
+      if (startDate) {
+        queryParts.push(`created_at:>=${startDate}`);
       }
+      if (endDate) {
+        queryParts.push(`created_at:<=${endDate}`);
+      }
+      
+      if (queryParts.length > 0) {
+        params.query = queryParts.join(' AND ');
+      }
+      
+      console.log('Fetching bills with params:', params);
 
       const response = await axios.get(`${this.baseURL}/bills`, {
         headers: this.getHeaders(),

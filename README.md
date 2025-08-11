@@ -2,6 +2,8 @@
 
 Dashboard para visualizar vendas do Better Education através da API Vindi.
 
+Última atualização: Força redeploy com novo API key.
+
 ## Configuração
 
 1. Clone o repositório

@@ -2,10 +2,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 
 export default function ApiTest() {
-  const [startDate, setStartDate] = useState('2025-08-01');
+  const [startDate, setStartDate] = useState('2024-01-01');
   const [endDate, setEndDate] = useState('2025-08-11');
-  const [installmentStartDate, setInstallmentStartDate] = useState('');
-  const [installmentEndDate, setInstallmentEndDate] = useState('');
   const [sheetId, setSheetId] = useState('1YBBwUQHOlOCNmpSA8hdGLKZYpbq4Pwbo3I3tx8U7dW8');
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -16,10 +14,8 @@ export default function ApiTest() {
     
     try {
       const urlParams = new URLSearchParams({
-        saleStartDate: startDate,
-        saleEndDate: endDate,
-        ...(installmentStartDate && { installmentStartDate }),
-        ...(installmentEndDate && { installmentEndDate }),
+        startDate: startDate,
+        endDate: endDate,
         sheetId,
         gid: '0',
         ...params
@@ -47,10 +43,8 @@ export default function ApiTest() {
 
   const downloadExcel = (endpoint = 'export-excel') => {
     const params = new URLSearchParams({
-      saleStartDate: startDate,
-      saleEndDate: endDate,
-      ...(installmentStartDate && { installmentStartDate }),
-      ...(installmentEndDate && { installmentEndDate }),
+      startDate: startDate,
+      endDate: endDate,
       sheetId,
       gid: '0',
       format: 'excel'
@@ -93,29 +87,6 @@ export default function ApiTest() {
               </label>
             </div>
             
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <label>
-                <strong>Data Parcela Início:</strong>
-                <input 
-                  type="date" 
-                  value={installmentStartDate} 
-                  onChange={(e) => setInstallmentStartDate(e.target.value)}
-                  style={{ marginLeft: '10px', padding: '5px', width: '100%' }}
-                  placeholder="Opcional"
-                />
-              </label>
-              <label>
-                <strong>Data Parcela Fim:</strong>
-                <input 
-                  type="date" 
-                  value={installmentEndDate} 
-                  onChange={(e) => setInstallmentEndDate(e.target.value)}
-                  style={{ marginLeft: '10px', padding: '5px', width: '100%' }}
-                  placeholder="Opcional"
-                />
-              </label>
-            </div>
-            
             <label>
               <strong>Google Sheets ID:</strong>
               <input 
@@ -131,6 +102,13 @@ export default function ApiTest() {
         <div>
           <h3>Testes de API</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <button 
+              onClick={() => testEndpoint('debug-cpf')} 
+              disabled={loading}
+              style={{ padding: '8px 16px', backgroundColor: '#8b00ff', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+            >
+              🆔 Debug CPF/CNPJ
+            </button>
             <button 
               onClick={() => testEndpoint('raw-data')} 
               disabled={loading}

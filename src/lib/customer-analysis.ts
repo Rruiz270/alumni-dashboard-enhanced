@@ -206,7 +206,7 @@ export class CustomerAnalysisService {
       
       const result = spreadsheetData.find(row => 
         row.nome?.toLowerCase().trim() === nome.toLowerCase().trim() ||
-        row.cliente?.toLowerCase().trim() === nome.toLowerCase().trim()
+        (row as any).cliente?.toLowerCase().trim() === nome.toLowerCase().trim()
       );
       
       console.log(`📝 Resultado busca por nome: ${result ? 'ENCONTRADO' : 'NÃO ENCONTRADO'}`);
@@ -222,7 +222,7 @@ export class CustomerAnalysisService {
       const nome = transaction.nome?.toLowerCase().trim();
       if (nome) {
         const result = spreadsheetData.find(row => {
-          const sheetNome = (row.nome || row.cliente || '').toLowerCase().trim();
+          const sheetNome = (row.nome || (row as any).cliente || '').toLowerCase().trim();
           return sheetNome === nome;
         });
         console.log(`📝 Fallback por nome "${nome}": ${result ? 'ENCONTRADO' : 'NÃO ENCONTRADO'}`);
@@ -240,11 +240,11 @@ export class CustomerAnalysisService {
       // Tenta diferentes campos da planilha onde pode estar o CPF
       const possibleFields = [
         row.cpf_cnpj,
-        row['cpf/cnpj'], 
-        row['CPF/CNPJ'],
-        row.cpf,
-        row.cnpj,
-        row.documento
+        (row as any)['cpf/cnpj'], 
+        (row as any)['CPF/CNPJ'],
+        (row as any).cpf,
+        (row as any).cnpj,
+        (row as any).documento
       ];
       
       for (const field of possibleFields) {

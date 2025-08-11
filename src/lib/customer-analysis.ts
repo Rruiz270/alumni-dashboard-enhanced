@@ -196,33 +196,77 @@ export class CustomerAnalysisService {
     transaction: Sale, 
     spreadsheetData: SpreadsheetRow[]
   ): SpreadsheetRow | undefined {
+    
+    console.log(`🔍 Buscando match para: "${cpfCnpj}" (${transaction.nome})`);
+    
     // Se o cpfCnpj for uma chave baseada em nome, extraia o nome
     if (cpfCnpj.startsWith('nome_')) {
       const nome = cpfCnpj.replace('nome_', '');
-      return spreadsheetData.find(row => 
+      console.log(`📝 Busca por nome: "${nome}"`);
+      
+      const result = spreadsheetData.find(row => 
         row.nome?.toLowerCase().trim() === nome.toLowerCase().trim() ||
         row.cliente?.toLowerCase().trim() === nome.toLowerCase().trim()
       );
+      
+      console.log(`📝 Resultado busca por nome: ${result ? 'ENCONTRADO' : 'NÃO ENCONTRADO'}`);
+      return result;
+    }
+    
+    // Use o CPF/CNPJ da transação diretamente, não da chave de agrupamento
+    const realCpfCnpj = transaction.cpf_cnpj || cpfCnpj;
+    
+    if (!realCpfCnpj || realCpfCnpj.trim() === '') {
+      console.log(`❌ CPF/CNPJ vazio para ${transaction.nome}, tentando busca por nome`);
+      // Fallback: busca por nome
+      const nome = transaction.nome?.toLowerCase().trim();
+      if (nome) {
+        const result = spreadsheetData.find(row => {
+          const sheetNome = (row.nome || row.cliente || '').toLowerCase().trim();
+          return sheetNome === nome;
+        });
+        console.log(`📝 Fallback por nome "${nome}": ${result ? 'ENCONTRADO' : 'NÃO ENCONTRADO'}`);
+        return result;
+      }
+      return undefined;
     }
     
     // Para CPF/CNPJ, normalize removendo formatação
-    const normalizedKey = cpfCnpj.replace(/[.\-\/\s]/g, '');
+    const normalizedVindiCpf = realCpfCnpj.replace(/[.\-\/\s]/g, '');
+    console.log(`🔢 CPF/CNPJ normalizado do Vindi: "${normalizedVindiCpf}"`);
     
-    return spreadsheetData.find(row => {
-      // Normaliza CPF/CNPJ da planilha
-      const rowCpfCnpj = (row.cpf_cnpj || '').replace(/[.\-\/\s]/g, '');
+    // Busca na planilha com debug
+    const result = spreadsheetData.find((row, index) => {
+      // Tenta diferentes campos da planilha onde pode estar o CPF
+      const possibleFields = [
+        row.cpf_cnpj,
+        row['cpf/cnpj'], 
+        row['CPF/CNPJ'],
+        row.cpf,
+        row.cnpj,
+        row.documento
+      ];
       
-      // Busca por CPF/CNPJ primeiro
-      if (rowCpfCnpj && normalizedKey && rowCpfCnpj === normalizedKey) {
-        return true;
+      for (const field of possibleFields) {
+        if (field && typeof field === 'string' && field.trim()) {
+          const normalizedSheetCpf = field.replace(/[.\-\/\s]/g, '');
+          
+          if (index < 3) { // Log apenas primeiras 3 linhas
+            console.log(`📋 Linha ${index} - Campo: "${field}" -> Normalizado: "${normalizedSheetCpf}"`);
+          }
+          
+          if (normalizedSheetCpf === normalizedVindiCpf) {
+            console.log(`✅ MATCH ENCONTRADO! Vindi: "${normalizedVindiCpf}" = Planilha: "${normalizedSheetCpf}"`);
+            return true;
+          }
+        }
       }
       
-      // Fallback: busca por nome se CPF/CNPJ não encontrado
-      const vindiNome = transaction.nome?.toLowerCase().trim();
-      const sheetNome = (row.nome || row.cliente || '').toLowerCase().trim();
-      
-      return vindiNome && sheetNome && vindiNome === sheetNome;
+      return false;
     });
+    
+    console.log(`🔍 Resultado final da busca: ${result ? 'ENCONTRADO' : 'NÃO ENCONTRADO'}`);
+    return result;
   }
 
   /**

@@ -132,6 +132,13 @@ export default function ApiTest() {
           <h3>Testes de API</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <button 
+              onClick={() => testEndpoint('raw-data')} 
+              disabled={loading}
+              style={{ padding: '8px 16px', backgroundColor: '#ff006e', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+            >
+              🔍 Dados Brutos Vindi
+            </button>
+            <button 
               onClick={() => testEndpoint('debug-crossmatch')} 
               disabled={loading}
               style={{ padding: '8px 16px', backgroundColor: '#e83e8c', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}

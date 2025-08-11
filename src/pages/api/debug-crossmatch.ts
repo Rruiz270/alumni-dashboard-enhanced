@@ -52,19 +52,18 @@ export default async function handler(
         const sale = client.transformToSale(bill, customer, charge);
         vindiSales.push(sale);
         
-        // Log dos primeiros 3 para debug
-        if (vindiSales.length <= 3) {
-          console.log(`Venda ${vindiSales.length}:`, {
+        // Log DOS PRIMEIROS 5 PARA DEBUG COMPLETO
+        if (vindiSales.length <= 5) {
+          console.log(`=== VENDA ${vindiSales.length} DEBUG COMPLETO ===`);
+          console.log('Customer completo:', JSON.stringify(customer, null, 2));
+          console.log('Bill completa:', JSON.stringify(bill, null, 2));
+          console.log('Sale processada:', {
             nome: sale.nome,
-            customer_full: customer,
-            cpf_cnpj_original: customer.registry_code,
-            cpf_cnpj_processado: sale.cpf_cnpj,
-            cpf_normalizado: (sale.cpf_cnpj || '').replace(/[.\-\/\s]/g, ''),
-            // Outros campos possíveis onde pode estar o CPF
-            customer_code: customer.code,
-            customer_email: customer.email,
-            customer_metadata: customer.metadata
+            cpf_cnpj_final: sale.cpf_cnpj,
+            documento: sale.documento,
+            cliente: sale.cliente
           });
+          console.log('==========================================');
         }
       }
     }

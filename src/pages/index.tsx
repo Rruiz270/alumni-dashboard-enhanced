@@ -51,9 +51,14 @@ export default function Dashboard() {
     <div className="container">
       <div className="header">
         <h1>Dashboard de Vendas - Better Education</h1>
-        <Link href="/dashboard" className="link-button">
-          Ver Análise de Clientes →
-        </Link>
+        <div className="nav-buttons">
+          <Link href="/dashboard" className="link-button">
+            Ver Análise de Clientes →
+          </Link>
+          <Link href="/api-test" className="link-button secondary">
+            Testar APIs
+          </Link>
+        </div>
       </div>
       
       <div className="filters">
@@ -175,6 +180,19 @@ export default function Dashboard() {
 
         .link-button:hover {
           background-color: #218838;
+        }
+
+        .nav-buttons {
+          display: flex;
+          gap: 10px;
+        }
+
+        .link-button.secondary {
+          background-color: #6c757d;
+        }
+
+        .link-button.secondary:hover {
+          background-color: #5a6268;
         }
 
         .filters {

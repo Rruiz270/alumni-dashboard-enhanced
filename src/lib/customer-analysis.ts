@@ -29,7 +29,17 @@ export class CustomerAnalysisService {
     const groups = new Map<string, Sale[]>();
     
     for (const sale of sales) {
-      const key = sale.cpf_cnpj || sale.nome || `unknown_${sale.cliente}`;
+      // Priorize CPF/CNPJ como chave principal para agrupamento
+      let key = '';
+      
+      if (sale.cpf_cnpj && sale.cpf_cnpj.trim()) {
+        // Remove formatação do CPF/CNPJ para padronizar
+        key = sale.cpf_cnpj.replace(/[.\-\/\s]/g, '');
+      } else if (sale.nome && sale.nome.trim()) {
+        key = `nome_${sale.nome.trim()}`;
+      } else {
+        key = `unknown_${sale.cliente || 'sem_identificacao'}`;
+      }
       
       if (!groups.has(key)) {
         groups.set(key, []);
@@ -57,9 +67,7 @@ export class CustomerAnalysisService {
     const lastTransaction = sortedSales[sortedSales.length - 1];
     
     // Find corresponding spreadsheet data
-    const spreadsheetRow = spreadsheetData.find(row => 
-      row.cpf_cnpj === cpfCnpj || row.nome === firstTransaction.nome
-    );
+    const spreadsheetRow = this.findSpreadsheetMatch(cpfCnpj, firstTransaction, spreadsheetData);
     
     // Calculate payment analysis
     const totalPaidAmount = sales.reduce((sum, sale) => sum + sale.valor_total, 0);
@@ -76,8 +84,11 @@ export class CustomerAnalysisService {
     // Find inconsistencies
     const inconsistencies = this.findInconsistencies(sales, spreadsheetRow);
     
+    // Extract real CPF/CNPJ for display
+    const realCpfCnpj = firstTransaction.cpf_cnpj || '';
+    
     return {
-      cpf_cnpj: cpfCnpj,
+      cpf_cnpj: realCpfCnpj,
       nome: firstTransaction.nome,
       email: firstTransaction.cliente, // Using cliente as email placeholder
       celular: firstTransaction.celular,
@@ -177,6 +188,43 @@ export class CustomerAnalysisService {
     return lastPayment.toISOString().split('T')[0];
   }
   
+  /**
+   * Finds matching spreadsheet row based on CPF/CNPJ primarily
+   */
+  private findSpreadsheetMatch(
+    cpfCnpj: string, 
+    transaction: Sale, 
+    spreadsheetData: SpreadsheetRow[]
+  ): SpreadsheetRow | undefined {
+    // Se o cpfCnpj for uma chave baseada em nome, extraia o nome
+    if (cpfCnpj.startsWith('nome_')) {
+      const nome = cpfCnpj.replace('nome_', '');
+      return spreadsheetData.find(row => 
+        row.nome?.toLowerCase().trim() === nome.toLowerCase().trim() ||
+        row.cliente?.toLowerCase().trim() === nome.toLowerCase().trim()
+      );
+    }
+    
+    // Para CPF/CNPJ, normalize removendo formatação
+    const normalizedKey = cpfCnpj.replace(/[.\-\/\s]/g, '');
+    
+    return spreadsheetData.find(row => {
+      // Normaliza CPF/CNPJ da planilha
+      const rowCpfCnpj = (row.cpf_cnpj || '').replace(/[.\-\/\s]/g, '');
+      
+      // Busca por CPF/CNPJ primeiro
+      if (rowCpfCnpj && normalizedKey && rowCpfCnpj === normalizedKey) {
+        return true;
+      }
+      
+      // Fallback: busca por nome se CPF/CNPJ não encontrado
+      const vindiNome = transaction.nome?.toLowerCase().trim();
+      const sheetNome = (row.nome || row.cliente || '').toLowerCase().trim();
+      
+      return vindiNome && sheetNome && vindiNome === sheetNome;
+    });
+  }
+
   /**
    * Finds inconsistencies between Vindi data and spreadsheet
    */

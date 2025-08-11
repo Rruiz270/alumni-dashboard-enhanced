@@ -78,9 +78,17 @@ export default async function handler(
     const vindiAnalysis = analysisService.analyzeCustomerPayments(vindiSales, sheetsData);
     const summary = analysisService.generateSummary(vindiAnalysis);
 
-    // Find customers in Vindi but not in Sheets
-    const vindiCustomers = new Set(vindiSales.map(s => s.cpf_cnpj || s.nome));
-    const sheetsCustomers = new Set(sheetsData.map(s => s['cpf/cnpj'] || s.nome || s['CPF/CNPJ'] || s.Nome));
+    // Find customers in Vindi but not in Sheets (normalize CPF/CNPJ)
+    const vindiCustomers = new Set(
+      vindiSales.map(s => (s.cpf_cnpj || '').replace(/[.\-\/\s]/g, '')).filter(c => c)
+    );
+    
+    const sheetsCustomers = new Set(
+      sheetsData.map(s => {
+        const cpf = s['cpf/cnpj'] || s['CPF/CNPJ'] || s.cpf_cnpj || '';
+        return cpf.replace(/[.\-\/\s]/g, '');
+      }).filter(c => c)
+    );
     
     const onlyInVindi = Array.from(vindiCustomers).filter(c => !sheetsCustomers.has(c));
     const onlyInSheets = Array.from(sheetsCustomers).filter(c => c && !vindiCustomers.has(c));

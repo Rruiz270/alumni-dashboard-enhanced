@@ -11,74 +11,87 @@ import {
   ShoppingBag, Briefcase, AlertTriangle, X
 } from 'lucide-react';
 
-export default function Dashboard() {
+const SalesDashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
-  const [salesData, setSalesData] = useState<any>(null);
-  const [customerAnalysis, setCustomerAnalysis] = useState<any[]>([]);
-  const [inconsistencies, setInconsistencies] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  // Configurações de data
-  const [startDate] = useState('2024-01-01');
-  const [endDate] = useState('2025-08-11');
-  const [sheetId] = useState('1YBBwUQHOlOCNmpSA8hdGLKZYpbq4Pwbo3I3tx8U7dW8');
-
-  const fetchData = async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const params = new URLSearchParams({
-        startDate,
-        endDate,
-        sheetId,
-        gid: '0'
-      });
-
-      const response = await fetch(`/api/export-advanced?${params}`);
-      
-      if (!response.ok) {
-        throw new Error(`Erro ao buscar dados: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      if (data.customers) {
-        setCustomerAnalysis(data.customers);
-        
-        // Filtrar inconsistências
-        const inconsistentCustomers = data.customers.filter((customer: any) => 
-          customer.hasInconsistencies || !customer.spreadsheetData
-        );
-        setInconsistencies(inconsistentCustomers);
-      }
-
-      if (data.summary) {
-        setSalesData({
-          totalRevenue: data.summary.totalContractValue || 0,
-          totalCustomers: data.summary.totalCustomers || 0,
-          pendingPayments: data.summary.totalDelinquent || 0,
-          inconsistencies: data.summary.customersWithInconsistencies || 0,
-          totalPaidAmount: data.summary.totalPaidAmount || 0,
-          futureRecurring: data.summary.totalFutureRecurring || 0,
-          upToDateCustomers: data.summary.upToDateCustomers || 0,
-          delinquentCustomers: data.summary.delinquentCustomers || 0
-        });
-      }
-
-    } catch (err) {
-      console.error('Erro ao buscar dados:', err);
-      setError(err instanceof Error ? err.message : 'Erro desconhecido');
-    } finally {
-      setLoading(false);
-    }
+  const [dateRange, setDateRange] = useState('month');
+  
+  // Dados mockados - serão substituídos pelos dados reais da API
+  const salesData = {
+    totalRevenue: 245680.50,
+    totalCustomers: 156,
+    pendingPayments: 45320.00,
+    inconsistencies: 23,
+    monthlyGrowth: 12.5,
+    cancellationRate: 8.2
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  const paymentMethods = [
+    { name: 'Cartão Parcelado', value: 45, color: '#3b82f6' },
+    { name: 'Cartão Recorrente', value: 30, color: '#10b981' },
+    { name: 'PIX', value: 15, color: '#f59e0b' },
+    { name: 'Boleto', value: 10, color: '#6366f1' }
+  ];
+
+  const salesByType = [
+    { name: 'Produto', value: 50, color: '#8b5cf6' },
+    { name: 'Serviço', value: 50, color: '#ec4899' }
+  ];
+
+  const monthlyRevenue = [
+    { month: 'Jan', vindi: 45000, planilha: 44500, diferenca: 500 },
+    { month: 'Fev', vindi: 52000, planilha: 51800, diferenca: 200 },
+    { month: 'Mar', vindi: 48000, planilha: 48500, diferenca: -500 },
+    { month: 'Abr', vindi: 58000, planilha: 57000, diferenca: 1000 },
+    { month: 'Mai', vindi: 62000, planilha: 61500, diferenca: 500 },
+    { month: 'Jun', vindi: 65000, planilha: 64800, diferenca: 200 }
+  ];
+
+  const inconsistenciesData = [
+    {
+      id: 1,
+      cpf: '123.456.789-00',
+      cliente: 'João Silva',
+      tipo: 'Valor divergente',
+      vindiValor: 1500.00,
+      planilhaValor: 1450.00,
+      diferenca: 50.00,
+      status: 'pendente'
+    },
+    {
+      id: 2,
+      cpf: '987.654.321-00',
+      cliente: 'Maria Santos',
+      tipo: 'Forma pagamento',
+      vindiForma: 'Cartão Recorrente',
+      planilhaForma: 'Cartão Parcelado',
+      status: 'analisando'
+    },
+    {
+      id: 3,
+      cpf: '456.789.123-00',
+      cliente: 'Pedro Oliveira',
+      tipo: 'Sinal PIX pendente',
+      valorSinal: 500.00,
+      valorRestante: 1000.00,
+      status: 'aguardando'
+    }
+  ];
+
+  const customerDetails = [
+    {
+      cpf: '123.456.789-00',
+      nome: 'João Silva',
+      produto: 'Curso Completo',
+      valorTotal: 3000.00,
+      valorPago: 1500.00,
+      valorPendente: 1500.00,
+      parcelas: '6x',
+      formaPagamento: 'Cartão Parcelado',
+      dataVenda: '15/06/2024',
+      status: 'Ativo'
+    }
+  ];
 
   const KPICard = ({ title, value, icon: Icon, trend, color = "blue" }: {
     title: string;
@@ -105,50 +118,37 @@ export default function Dashboard() {
     </Card>
   );
 
-  if (loading) {
-    return (
-      <div className="p-6 max-w-7xl mx-auto bg-gray-50 min-h-screen">
-        <div className="flex justify-center items-center h-64">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500 mx-auto"></div>
-            <p className="mt-4 text-lg">Carregando dados da Vindi...</p>
-            <p className="text-sm text-gray-600">Isso pode demorar alguns segundos</p>
+  const InconsistencyAlert = ({ inconsistency }: { inconsistency: any }) => (
+    <Alert className="mb-4 border-orange-200 bg-orange-50">
+      <AlertCircle className="h-4 w-4 text-orange-600" />
+      <AlertDescription className="ml-2">
+        <div className="flex justify-between items-start">
+          <div>
+            <strong>{inconsistency.cliente}</strong> - CPF: {inconsistency.cpf}
+            <p className="text-sm mt-1">{inconsistency.tipo}</p>
+            {inconsistency.diferenca && (
+              <p className="text-sm text-orange-600 font-semibold">
+                Diferença: R$ {inconsistency.diferenca.toFixed(2)}
+              </p>
+            )}
           </div>
+          <span className={`text-xs px-2 py-1 rounded-full ${
+            inconsistency.status === 'pendente' ? 'bg-red-100 text-red-800' :
+            inconsistency.status === 'analisando' ? 'bg-yellow-100 text-yellow-800' :
+            'bg-blue-100 text-blue-800'
+          }`}>
+            {inconsistency.status}
+          </span>
         </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="p-6 max-w-7xl mx-auto bg-gray-50 min-h-screen">
-        <Alert className="border-red-200 bg-red-50">
-          <AlertCircle className="h-4 w-4 text-red-600" />
-          <AlertDescription className="ml-2">
-            <strong>Erro ao carregar dados:</strong> {error}
-            <button 
-              onClick={fetchData} 
-              className="ml-4 px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700"
-            >
-              Tentar Novamente
-            </button>
-          </AlertDescription>
-        </Alert>
-      </div>
-    );
-  }
+      </AlertDescription>
+    </Alert>
+  );
 
   return (
     <div className="p-6 max-w-7xl mx-auto bg-gray-50 min-h-screen">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Dashboard de Vendas - VINDI</h1>
-        <p className="text-gray-600 mt-2">Controle integrado de vendas e inconsistências - v1.0</p>
-        <button 
-          onClick={fetchData} 
-          className="mt-2 px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
-        >
-          🔄 Atualizar Dados
-        </button>
+        <p className="text-gray-600 mt-2">Controle integrado de vendas e inconsistências</p>
       </div>
 
       {/* Tabs */}
@@ -163,18 +163,24 @@ export default function Dashboard() {
           className={`pb-2 px-4 ${activeTab === 'inconsistencies' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-600'}`}
           onClick={() => setActiveTab('inconsistencies')}
         >
-          Inconsistências ({inconsistencies.length})
+          Inconsistências ({inconsistenciesData.length})
         </button>
         <button
           className={`pb-2 px-4 ${activeTab === 'customers' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-600'}`}
           onClick={() => setActiveTab('customers')}
         >
-          Clientes ({customerAnalysis.length})
+          Clientes
+        </button>
+        <button
+          className={`pb-2 px-4 ${activeTab === 'reports' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-600'}`}
+          onClick={() => setActiveTab('reports')}
+        >
+          Relatórios
         </button>
       </div>
 
       {/* Overview Tab */}
-      {activeTab === 'overview' && salesData && (
+      {activeTab === 'overview' && (
         <>
           {/* KPIs */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -182,12 +188,14 @@ export default function Dashboard() {
               title="Receita Total" 
               value={`R$ ${salesData.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
               icon={DollarSign}
+              trend={salesData.monthlyGrowth}
               color="green"
             />
             <KPICard 
               title="Total de Clientes" 
               value={salesData.totalCustomers}
               icon={Users}
+              trend={8.3}
               color="blue"
             />
             <KPICard 
@@ -198,44 +206,76 @@ export default function Dashboard() {
             />
             <KPICard 
               title="Inconsistências" 
-              value={inconsistencies.length}
+              value={salesData.inconsistencies}
               icon={AlertTriangle}
               color="red"
             />
           </div>
 
-          {/* Status Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+          {/* Charts Row 1 */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             <Card>
-              <CardContent className="p-6">
-                <h3 className="font-semibold mb-2 text-green-600">Clientes em Dia</h3>
-                <p className="text-3xl font-bold">{salesData.upToDateCustomers}</p>
-                <p className="text-sm text-gray-600 mt-1">
-                  {((salesData.upToDateCustomers / salesData.totalCustomers) * 100).toFixed(1)}% do total
-                </p>
+              <CardHeader>
+                <CardTitle>Comparativo VINDI vs Planilha</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={monthlyRevenue}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="month" />
+                    <YAxis />
+                    <Tooltip formatter={(value) => `R$ ${value.toLocaleString('pt-BR')}`} />
+                    <Legend />
+                    <Line type="monotone" dataKey="vindi" stroke="#3b82f6" name="VINDI" />
+                    <Line type="monotone" dataKey="planilha" stroke="#10b981" name="Planilha" />
+                    <Line type="monotone" dataKey="diferenca" stroke="#ef4444" name="Diferença" />
+                  </LineChart>
+                </ResponsiveContainer>
               </CardContent>
             </Card>
 
             <Card>
-              <CardContent className="p-6">
-                <h3 className="font-semibold mb-2 text-red-600">Inadimplentes</h3>
-                <p className="text-3xl font-bold">{salesData.delinquentCustomers}</p>
-                <p className="text-sm text-gray-600 mt-1">
-                  R$ {salesData.pendingPayments.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} pendentes
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-6">
-                <h3 className="font-semibold mb-2 text-blue-600">Valor Pago</h3>
-                <p className="text-3xl font-bold">R$ {salesData.totalPaidAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                <p className="text-sm text-gray-600 mt-1">
-                  {((salesData.totalPaidAmount / salesData.totalRevenue) * 100).toFixed(1)}% do total
-                </p>
+              <CardHeader>
+                <CardTitle>Formas de Pagamento</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={paymentMethods}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {paymentMethods.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
               </CardContent>
             </Card>
           </div>
+
+          {/* Recent Inconsistencies Alert */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <AlertCircle className="w-5 h-5 mr-2 text-orange-500" />
+                Inconsistências Recentes
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {inconsistenciesData.slice(0, 3).map((item) => (
+                <InconsistencyAlert key={item.id} inconsistency={item} />
+              ))}
+            </CardContent>
+          </Card>
         </>
       )}
 
@@ -244,39 +284,121 @@ export default function Dashboard() {
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Inconsistências Encontradas</CardTitle>
+              <CardTitle>Todas as Inconsistências</CardTitle>
               <p className="text-sm text-gray-600">
-                Clientes com problemas ou não encontrados na planilha
+                Diferenças identificadas entre VINDI e Planilha de Controle
               </p>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {inconsistencies.slice(0, 10).map((customer, index) => (
-                  <Alert key={index} className="border-orange-200 bg-orange-50">
-                    <AlertCircle className="h-4 w-4 text-orange-600" />
-                    <AlertDescription className="ml-2">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <strong>{customer.nome}</strong> - CPF: {customer.cpf_cnpj || 'Não informado'}
-                          <p className="text-sm mt-1">
-                            {!customer.spreadsheetData ? 'Não encontrado na planilha' : 'Dados divergentes'}
-                          </p>
-                          {customer.inconsistencies && customer.inconsistencies.length > 0 && (
-                            <p className="text-sm text-orange-600">
-                              {customer.inconsistencies.join(', ')}
-                            </p>
-                          )}
-                        </div>
-                        <span className="text-xs px-2 py-1 rounded-full bg-orange-100 text-orange-800">
-                          {customer.isDelinquent ? 'Inadimplente' : 'Pendente'}
-                        </span>
-                      </div>
-                    </AlertDescription>
-                  </Alert>
-                ))}
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left p-2">CPF/CNPJ</th>
+                      <th className="text-left p-2">Cliente</th>
+                      <th className="text-left p-2">Tipo</th>
+                      <th className="text-left p-2">VINDI</th>
+                      <th className="text-left p-2">Planilha</th>
+                      <th className="text-left p-2">Diferença</th>
+                      <th className="text-left p-2">Status</th>
+                      <th className="text-left p-2">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inconsistenciesData.map((item) => (
+                      <tr key={item.id} className="border-b hover:bg-gray-50">
+                        <td className="p-2">{item.cpf}</td>
+                        <td className="p-2">{item.cliente}</td>
+                        <td className="p-2">{item.tipo}</td>
+                        <td className="p-2">
+                          {item.vindiValor ? `R$ ${item.vindiValor.toFixed(2)}` : item.vindiForma || '-'}
+                        </td>
+                        <td className="p-2">
+                          {item.planilhaValor ? `R$ ${item.planilhaValor.toFixed(2)}` : item.planilhaForma || '-'}
+                        </td>
+                        <td className="p-2 text-red-600 font-semibold">
+                          {item.diferenca ? `R$ ${item.diferenca.toFixed(2)}` : '-'}
+                        </td>
+                        <td className="p-2">
+                          <span className={`text-xs px-2 py-1 rounded-full ${
+                            item.status === 'pendente' ? 'bg-red-100 text-red-800' :
+                            item.status === 'analisando' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-blue-100 text-blue-800'
+                          }`}>
+                            {item.status}
+                          </span>
+                        </td>
+                        <td className="p-2">
+                          <button className="text-blue-600 hover:text-blue-800 text-sm">
+                            Resolver
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </CardContent>
           </Card>
+
+          {/* Resumo de Inconsistências */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Card>
+              <CardContent className="p-6">
+                <h3 className="font-semibold mb-2">Por Tipo</h3>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-sm">Valor divergente</span>
+                    <span className="font-semibold">12</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm">Forma pagamento</span>
+                    <span className="font-semibold">8</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm">Sinal PIX pendente</span>
+                    <span className="font-semibold">3</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <h3 className="font-semibold mb-2">Impacto Financeiro</h3>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-sm">Total divergente</span>
+                    <span className="font-semibold text-red-600">R$ 3.450,00</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm">Sinais pendentes</span>
+                    <span className="font-semibold text-orange-600">R$ 1.500,00</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <h3 className="font-semibold mb-2">Status de Resolução</h3>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-sm">Resolvidas hoje</span>
+                    <span className="font-semibold text-green-600">5</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm">Em análise</span>
+                    <span className="font-semibold text-yellow-600">8</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm">Pendentes</span>
+                    <span className="font-semibold text-red-600">10</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       )}
 
@@ -284,37 +406,51 @@ export default function Dashboard() {
       {activeTab === 'customers' && (
         <Card>
           <CardHeader>
-            <CardTitle>Lista de Clientes</CardTitle>
+            <CardTitle>Detalhes dos Clientes</CardTitle>
+            <div className="mt-4">
+              <input
+                type="text"
+                placeholder="Buscar por CPF/CNPJ ou nome..."
+                className="w-full md:w-96 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b">
-                    <th className="text-left p-2">Nome</th>
                     <th className="text-left p-2">CPF/CNPJ</th>
+                    <th className="text-left p-2">Nome</th>
+                    <th className="text-left p-2">Produto/Serviço</th>
                     <th className="text-left p-2">Valor Total</th>
                     <th className="text-left p-2">Valor Pago</th>
                     <th className="text-left p-2">Pendente</th>
                     <th className="text-left p-2">Status</th>
+                    <th className="text-left p-2">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {customerAnalysis.slice(0, 20).map((customer, index) => (
+                  {customerDetails.map((customer, index) => (
                     <tr key={index} className="border-b hover:bg-gray-50">
+                      <td className="p-2">{customer.cpf}</td>
                       <td className="p-2">{customer.nome}</td>
-                      <td className="p-2">{customer.cpf_cnpj || 'N/A'}</td>
-                      <td className="p-2">R$ {customer.totalContractValue.toFixed(2)}</td>
-                      <td className="p-2 text-green-600">R$ {customer.totalPaidAmount.toFixed(2)}</td>
-                      <td className="p-2 text-orange-600">R$ {customer.delinquentAmount.toFixed(2)}</td>
+                      <td className="p-2">{customer.produto}</td>
+                      <td className="p-2">R$ {customer.valorTotal.toFixed(2)}</td>
+                      <td className="p-2 text-green-600">R$ {customer.valorPago.toFixed(2)}</td>
+                      <td className="p-2 text-orange-600">R$ {customer.valorPendente.toFixed(2)}</td>
                       <td className="p-2">
-                        <span className={`text-xs px-2 py-1 rounded-full ${
-                          customer.isUpToDate ? 'bg-green-100 text-green-800' :
-                          customer.isDelinquent ? 'bg-red-100 text-red-800' :
-                          'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {customer.isUpToDate ? 'Em dia' : customer.isDelinquent ? 'Inadimplente' : 'Pendente'}
+                        <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-800">
+                          {customer.status}
                         </span>
+                      </td>
+                      <td className="p-2">
+                        <button 
+                          className="text-blue-600 hover:text-blue-800 text-sm"
+                          onClick={() => setSelectedCustomer(customer)}
+                        >
+                          Ver detalhes
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -324,6 +460,168 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       )}
+
+      {/* Reports Tab */}
+      {activeTab === 'reports' && (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Análise de Vendas por Período</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-4">
+                <select className="px-4 py-2 border rounded-lg">
+                  <option>Últimos 30 dias</option>
+                  <option>Últimos 90 dias</option>
+                  <option>Este ano</option>
+                </select>
+              </div>
+              <ResponsiveContainer width="100%" height={400}>
+                <BarChart data={monthlyRevenue}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <Tooltip formatter={(value) => `R$ ${value.toLocaleString('pt-BR')}`} />
+                  <Legend />
+                  <Bar dataKey="vindi" fill="#3b82f6" name="VINDI" />
+                  <Bar dataKey="planilha" fill="#10b981" name="Planilha" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Taxa de Cancelamento</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center">
+                  <p className="text-4xl font-bold text-red-600">{salesData.cancellationRate}%</p>
+                  <p className="text-gray-600 mt-2">Taxa média dos últimos 6 meses</p>
+                  <div className="mt-6 space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span>Cancelamentos este mês</span>
+                      <span className="font-semibold">12</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Valor perdido</span>
+                      <span className="font-semibold text-red-600">R$ 18.500,00</span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Distribuição Produto vs Serviço</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={200}>
+                  <PieChart>
+                    <Pie
+                      data={salesByType}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {salesByType.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {/* Customer Detail Modal */}
+      {selectedCustomer && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-start mb-4">
+              <h2 className="text-xl font-bold">Detalhes do Cliente</h2>
+              <button 
+                onClick={() => setSelectedCustomer(null)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-gray-600">Nome</p>
+                  <p className="font-semibold">{selectedCustomer.nome}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">CPF/CNPJ</p>
+                  <p className="font-semibold">{selectedCustomer.cpf}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Produto/Serviço</p>
+                  <p className="font-semibold">{selectedCustomer.produto}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Data da Venda</p>
+                  <p className="font-semibold">{selectedCustomer.dataVenda}</p>
+                </div>
+              </div>
+              
+              <div className="border-t pt-4">
+                <h3 className="font-semibold mb-2">Informações Financeiras</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600">Valor Total</p>
+                    <p className="font-semibold">R$ {selectedCustomer.valorTotal.toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Valor Pago</p>
+                    <p className="font-semibold text-green-600">R$ {selectedCustomer.valorPago.toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Valor Pendente</p>
+                    <p className="font-semibold text-orange-600">R$ {selectedCustomer.valorPendente.toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Forma de Pagamento</p>
+                    <p className="font-semibold">{selectedCustomer.formaPagamento} - {selectedCustomer.parcelas}</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="border-t pt-4">
+                <h3 className="font-semibold mb-2">Histórico de Pagamentos</h3>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span>Parcela 1/6</span>
+                    <span className="text-green-600">Pago - R$ 250,00</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>Parcela 2/6</span>
+                    <span className="text-green-600">Pago - R$ 250,00</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>Parcela 3/6</span>
+                    <span className="text-orange-600">Pendente - R$ 250,00</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
-}
+};
+
+export default SalesDashboard;

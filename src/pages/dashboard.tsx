@@ -8,90 +8,47 @@ import {
 import { 
   DollarSign, Users, AlertCircle, CheckCircle, 
   CreditCard, FileText, TrendingUp, Calendar,
-  ShoppingBag, Briefcase, AlertTriangle, X
+  ShoppingBag, Briefcase, AlertTriangle, X, RefreshCw
 } from 'lucide-react';
+import { useDashboardData, useCustomerSearch, useInconsistencyResolver } from '@/hooks/useDashboardData';
 
 const SalesDashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [dateRange, setDateRange] = useState('month');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredCustomers, setFilteredCustomers] = useState<any[]>([]);
   
-  // Dados mockados - serão substituídos pelos dados reais da API
-  const salesData = {
-    totalRevenue: 245680.50,
-    totalCustomers: 156,
-    pendingPayments: 45320.00,
-    inconsistencies: 23,
-    monthlyGrowth: 12.5,
-    cancellationRate: 8.2
+  // Hooks para dados
+  const { data, loading, error, refreshData } = useDashboardData();
+  const { results: searchResults, loading: searchLoading, searchCustomers } = useCustomerSearch();
+  const { resolveInconsistency, loading: resolveLoading } = useInconsistencyResolver();
+  
+  // Dados dos hooks
+  const salesData = data?.summary || {
+    totalRevenue: 0,
+    totalCustomers: 0,
+    pendingPayments: 0,
+    inconsistencies: 0,
+    totalPaidAmount: 0,
+    upToDateCustomers: 0,
+    delinquentCustomers: 0
   };
-
-  const paymentMethods = [
-    { name: 'Cartão Parcelado', value: 45, color: '#3b82f6' },
-    { name: 'Cartão Recorrente', value: 30, color: '#10b981' },
-    { name: 'PIX', value: 15, color: '#f59e0b' },
-    { name: 'Boleto', value: 10, color: '#6366f1' }
-  ];
-
+  
+  const paymentMethods = data?.paymentMethods || [];
+  const monthlyRevenue = data?.monthlyRevenue || [];
+  const inconsistenciesData = data?.inconsistencies || [];
+  const customerDetails = searchQuery ? searchResults : (filteredCustomers.length > 0 ? filteredCustomers : data?.customers || []);
+  
   const salesByType = [
     { name: 'Produto', value: 50, color: '#8b5cf6' },
     { name: 'Serviço', value: 50, color: '#ec4899' }
   ];
-
-  const monthlyRevenue = [
-    { month: 'Jan', vindi: 45000, planilha: 44500, diferenca: 500 },
-    { month: 'Fev', vindi: 52000, planilha: 51800, diferenca: 200 },
-    { month: 'Mar', vindi: 48000, planilha: 48500, diferenca: -500 },
-    { month: 'Abr', vindi: 58000, planilha: 57000, diferenca: 1000 },
-    { month: 'Mai', vindi: 62000, planilha: 61500, diferenca: 500 },
-    { month: 'Jun', vindi: 65000, planilha: 64800, diferenca: 200 }
-  ];
-
-  const inconsistenciesData = [
-    {
-      id: 1,
-      cpf: '123.456.789-00',
-      cliente: 'João Silva',
-      tipo: 'Valor divergente',
-      vindiValor: 1500.00,
-      planilhaValor: 1450.00,
-      diferenca: 50.00,
-      status: 'pendente'
-    },
-    {
-      id: 2,
-      cpf: '987.654.321-00',
-      cliente: 'Maria Santos',
-      tipo: 'Forma pagamento',
-      vindiForma: 'Cartão Recorrente',
-      planilhaForma: 'Cartão Parcelado',
-      status: 'analisando'
-    },
-    {
-      id: 3,
-      cpf: '456.789.123-00',
-      cliente: 'Pedro Oliveira',
-      tipo: 'Sinal PIX pendente',
-      valorSinal: 500.00,
-      valorRestante: 1000.00,
-      status: 'aguardando'
-    }
-  ];
-
-  const customerDetails = [
-    {
-      cpf: '123.456.789-00',
-      nome: 'João Silva',
-      produto: 'Curso Completo',
-      valorTotal: 3000.00,
-      valorPago: 1500.00,
-      valorPendente: 1500.00,
-      parcelas: '6x',
-      formaPagamento: 'Cartão Parcelado',
-      dataVenda: '15/06/2024',
-      status: 'Ativo'
-    }
-  ];
+  
+  // Calcular taxa de cancelamento
+  const cancellationRate = salesData.totalCustomers > 0 
+    ? ((salesData.delinquentCustomers / salesData.totalCustomers) * 100).toFixed(1)
+    : '0';
 
   const KPICard = ({ title, value, icon: Icon, trend, color = "blue" }: {
     title: string;
@@ -118,6 +75,33 @@ const SalesDashboard = () => {
     </Card>
   );
 
+  // Função para buscar clientes
+  const handleCustomerSearch = async (query: string) => {
+    setSearchQuery(query);
+    if (query.trim()) {
+      await searchCustomers(query);
+    }
+  };
+  
+  // Função para resolver inconsistência
+  const handleResolveInconsistency = async (inconsistencyId: number) => {
+    try {
+      await resolveInconsistency(inconsistencyId);
+      // Recarregar dados após resolver
+      refreshData();
+      alert('Inconsistência resolvida com sucesso!');
+    } catch (error) {
+      alert('Erro ao resolver inconsistência. Tente novamente.');
+    }
+  };
+  
+  // Atualizar lista de clientes filtrados quando os dados carregarem
+  useEffect(() => {
+    if (data?.customers && !searchQuery) {
+      setFilteredCustomers(data.customers);
+    }
+  }, [data, searchQuery]);
+  
   const InconsistencyAlert = ({ inconsistency }: { inconsistency: any }) => (
     <Alert className="mb-4 border-orange-200 bg-orange-50">
       <AlertCircle className="h-4 w-4 text-orange-600" />
@@ -144,12 +128,49 @@ const SalesDashboard = () => {
     </Alert>
   );
 
+  // Estados de loading e error
+  if (loading && !data) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto bg-gray-50 min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <RefreshCw className="w-12 h-12 mx-auto animate-spin text-blue-500 mb-4" />
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Carregando Dashboard</h2>
+          <p className="text-gray-600">Buscando dados da Vindi e planilha...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 max-w-7xl mx-auto bg-gray-50 min-h-screen">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard de Vendas - VINDI</h1>
-        <p className="text-gray-600 mt-2">Controle integrado de vendas e inconsistências</p>
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Dashboard de Vendas - VINDI</h1>
+            <p className="text-gray-600 mt-2">Controle integrado de vendas e inconsistências</p>
+          </div>
+          <button
+            onClick={refreshData}
+            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+            disabled={loading}
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            {loading ? 'Carregando...' : 'Atualizar Dados'}
+          </button>
+        </div>
       </div>
+
+      {/* Error Alert */}
+      {error && (
+        <Alert className="mb-6 border-orange-200 bg-orange-50">
+          <AlertCircle className="h-4 w-4 text-orange-600" />
+          <AlertDescription className="ml-2">
+            <strong>Aviso:</strong> {error}
+            <br />
+            <small>Usando dados de fallback. Clique em "Atualizar Dados" para tentar novamente.</small>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Tabs */}
       <div className="flex space-x-4 mb-6 border-b">
@@ -188,7 +209,7 @@ const SalesDashboard = () => {
               title="Receita Total" 
               value={`R$ ${salesData.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
               icon={DollarSign}
-              trend={salesData.monthlyGrowth}
+              trend={12.5}
               color="green"
             />
             <KPICard 
@@ -329,8 +350,12 @@ const SalesDashboard = () => {
                           </span>
                         </td>
                         <td className="p-2">
-                          <button className="text-blue-600 hover:text-blue-800 text-sm">
-                            Resolver
+                          <button 
+                            className="text-blue-600 hover:text-blue-800 text-sm disabled:opacity-50"
+                            onClick={() => handleResolveInconsistency(item.id)}
+                            disabled={resolveLoading}
+                          >
+                            {resolveLoading ? 'Resolvendo...' : 'Resolver'}
                           </button>
                         </td>
                       </tr>
@@ -411,8 +436,16 @@ const SalesDashboard = () => {
               <input
                 type="text"
                 placeholder="Buscar por CPF/CNPJ ou nome..."
+                value={searchQuery}
+                onChange={(e) => handleCustomerSearch(e.target.value)}
                 className="w-full md:w-96 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
+              {searchLoading && (
+                <div className="mt-2 text-sm text-gray-600">
+                  <RefreshCw className="inline w-4 h-4 mr-2 animate-spin" />
+                  Buscando...
+                </div>
+              )}
             </div>
           </CardHeader>
           <CardContent>
@@ -497,7 +530,7 @@ const SalesDashboard = () => {
               </CardHeader>
               <CardContent>
                 <div className="text-center">
-                  <p className="text-4xl font-bold text-red-600">{salesData.cancellationRate}%</p>
+                  <p className="text-4xl font-bold text-red-600">{cancellationRate}%</p>
                   <p className="text-gray-600 mt-2">Taxa média dos últimos 6 meses</p>
                   <div className="mt-6 space-y-2 text-sm">
                     <div className="flex justify-between">

@@ -142,7 +142,7 @@ export default function Dashboard() {
     <div className="p-6 max-w-7xl mx-auto bg-gray-50 min-h-screen">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Dashboard de Vendas - VINDI</h1>
-        <p className="text-gray-600 mt-2">Controle integrado de vendas e inconsistências</p>
+        <p className="text-gray-600 mt-2">Controle integrado de vendas e inconsistências - v1.0</p>
         <button 
           onClick={fetchData} 
           className="mt-2 px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"

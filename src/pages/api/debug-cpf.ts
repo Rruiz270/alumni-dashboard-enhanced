@@ -14,8 +14,8 @@ export default async function handler(
     
     const client = new VindiClient();
     
-    // Busca apenas 3 faturas para análise profunda
-    const bills = await client.fetchBills('2024-01-01', '2025-08-11', 3);
+    // Busca apenas 1 fatura para análise profunda e evitar rate limit
+    const bills = await client.fetchBills('2024-01-01', '2025-08-11', 1);
     
     const debugData: any[] = [];
     

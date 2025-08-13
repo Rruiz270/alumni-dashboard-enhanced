@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Alert, AlertDescription } from '../components/ui/alert';
 import { 
@@ -11,10 +11,47 @@ import {
   ShoppingBag, Briefcase, AlertTriangle, X
 } from 'lucide-react';
 
-const SalesDashboard = () => {
+interface KPICardProps {
+  title: string;
+  value: string | number;
+  icon: React.ComponentType<any>;
+  trend?: number;
+  color?: string;
+}
+
+interface InconsistencyProps {
+  inconsistency: {
+    id: number;
+    cpf: string;
+    cliente: string;
+    tipo: string;
+    vindiValor?: number;
+    planilhaValor?: number;
+    diferenca?: number;
+    vindiForma?: string;
+    planilhaForma?: string;
+    valorSinal?: number;
+    valorRestante?: number;
+    status: string;
+  };
+}
+
+interface Customer {
+  cpf: string;
+  nome: string;
+  produto: string;
+  valorTotal: number;
+  valorPago: number;
+  valorPendente: number;
+  parcelas: string;
+  formaPagamento: string;
+  dataVenda: string;
+  status: string;
+}
+
+const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
-  const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
-  const [dateRange, setDateRange] = useState('month');
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   
   // Dados mockados - serão substituídos pelos dados reais da API
   const salesData = {
@@ -78,7 +115,7 @@ const SalesDashboard = () => {
     }
   ];
 
-  const customerDetails = [
+  const customerDetails: Customer[] = [
     {
       cpf: '123.456.789-00',
       nome: 'João Silva',
@@ -90,16 +127,22 @@ const SalesDashboard = () => {
       formaPagamento: 'Cartão Parcelado',
       dataVenda: '15/06/2024',
       status: 'Ativo'
+    },
+    {
+      cpf: '987.654.321-00',
+      nome: 'Maria Santos',
+      produto: 'Mentoria Premium',
+      valorTotal: 2500.00,
+      valorPago: 2500.00,
+      valorPendente: 0.00,
+      parcelas: '1x',
+      formaPagamento: 'PIX',
+      dataVenda: '20/05/2024',
+      status: 'Concluído'
     }
   ];
 
-  const KPICard = ({ title, value, icon: Icon, trend, color = "blue" }: {
-    title: string;
-    value: string | number;
-    icon: React.ComponentType<any>;
-    trend?: number;
-    color?: string;
-  }) => (
+  const KPICard: React.FC<KPICardProps> = ({ title, value, icon: Icon, trend, color = "blue" }) => (
     <Card className="hover:shadow-lg transition-shadow">
       <CardContent className="p-6">
         <div className="flex items-center justify-between">
@@ -118,7 +161,7 @@ const SalesDashboard = () => {
     </Card>
   );
 
-  const InconsistencyAlert = ({ inconsistency }: { inconsistency: any }) => (
+  const InconsistencyAlert: React.FC<InconsistencyProps> = ({ inconsistency }) => (
     <Alert className="mb-4 border-orange-200 bg-orange-50">
       <AlertCircle className="h-4 w-4 text-orange-600" />
       <AlertDescription className="ml-2">
@@ -169,7 +212,7 @@ const SalesDashboard = () => {
           className={`pb-2 px-4 ${activeTab === 'customers' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-600'}`}
           onClick={() => setActiveTab('customers')}
         >
-          Clientes
+          Clientes ({customerDetails.length})
         </button>
         <button
           className={`pb-2 px-4 ${activeTab === 'reports' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-600'}`}
@@ -224,7 +267,7 @@ const SalesDashboard = () => {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="month" />
                     <YAxis />
-                    <Tooltip formatter={(value) => `R$ ${value.toLocaleString('pt-BR')}`} />
+                    <Tooltip formatter={(value) => `R$ ${Number(value).toLocaleString('pt-BR')}`} />
                     <Legend />
                     <Line type="monotone" dataKey="vindi" stroke="#3b82f6" name="VINDI" />
                     <Line type="monotone" dataKey="planilha" stroke="#10b981" name="Planilha" />
@@ -440,7 +483,11 @@ const SalesDashboard = () => {
                       <td className="p-2 text-green-600">R$ {customer.valorPago.toFixed(2)}</td>
                       <td className="p-2 text-orange-600">R$ {customer.valorPendente.toFixed(2)}</td>
                       <td className="p-2">
-                        <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-800">
+                        <span className={`text-xs px-2 py-1 rounded-full ${
+                          customer.status === 'Ativo' ? 'bg-green-100 text-green-800' :
+                          customer.status === 'Concluído' ? 'bg-blue-100 text-blue-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
                           {customer.status}
                         </span>
                       </td>
@@ -481,7 +528,7 @@ const SalesDashboard = () => {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" />
                   <YAxis />
-                  <Tooltip formatter={(value) => `R$ ${value.toLocaleString('pt-BR')}`} />
+                  <Tooltip formatter={(value) => `R$ ${Number(value).toLocaleString('pt-BR')}`} />
                   <Legend />
                   <Bar dataKey="vindi" fill="#3b82f6" name="VINDI" />
                   <Bar dataKey="planilha" fill="#10b981" name="Planilha" />
@@ -624,4 +671,4 @@ const SalesDashboard = () => {
   );
 };
 
-export default SalesDashboard;
+export default Dashboard;

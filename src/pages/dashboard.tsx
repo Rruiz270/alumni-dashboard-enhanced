@@ -80,7 +80,13 @@ export default function Dashboard() {
     fetchData();
   }, []);
 
-  const KPICard = ({ title, value, icon: Icon, trend, color = "blue" }) => (
+  const KPICard = ({ title, value, icon: Icon, trend, color = "blue" }: {
+    title: string;
+    value: string | number;
+    icon: React.ComponentType<any>;
+    trend?: number;
+    color?: string;
+  }) => (
     <Card className="hover:shadow-lg transition-shadow">
       <CardContent className="p-6">
         <div className="flex items-center justify-between">

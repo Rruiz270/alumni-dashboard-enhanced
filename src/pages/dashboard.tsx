@@ -10,11 +10,12 @@ import {
   CreditCard, FileText, TrendingUp, Calendar,
   ShoppingBag, Briefcase, AlertTriangle, X, RefreshCw
 } from 'lucide-react';
-import { useDashboardData, useCustomerSearch, useInconsistencyResolver } from '@/hooks/useDashboardData';
+import { useDashboardData, useCustomerSearch } from '@/hooks/useDashboardData';
 
 const SalesDashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
+  const [selectedInconsistency, setSelectedInconsistency] = useState<any>(null);
   const [dateRange, setDateRange] = useState('month');
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredCustomers, setFilteredCustomers] = useState<any[]>([]);
@@ -22,7 +23,7 @@ const SalesDashboard = () => {
   // Hooks para dados
   const { data, loading, error, refreshData } = useDashboardData();
   const { results: searchResults, loading: searchLoading, searchCustomers } = useCustomerSearch();
-  const { resolveInconsistency, loading: resolveLoading } = useInconsistencyResolver();
+  // Remove resolve functionality - replaced with show details
   
   // Dados dos hooks
   const salesData = data?.summary || {
@@ -83,17 +84,7 @@ const SalesDashboard = () => {
     }
   };
   
-  // Função para resolver inconsistência
-  const handleResolveInconsistency = async (inconsistencyId: number) => {
-    try {
-      await resolveInconsistency(inconsistencyId);
-      // Recarregar dados após resolver
-      refreshData();
-      alert('Inconsistência resolvida com sucesso!');
-    } catch (error) {
-      alert('Erro ao resolver inconsistência. Tente novamente.');
-    }
-  };
+  // Function to show inconsistency details - replaced resolve functionality
   
   // Atualizar lista de clientes filtrados quando os dados carregarem
   useEffect(() => {
@@ -351,11 +342,10 @@ const SalesDashboard = () => {
                         </td>
                         <td className="p-2">
                           <button 
-                            className="text-blue-600 hover:text-blue-800 text-sm disabled:opacity-50"
-                            onClick={() => handleResolveInconsistency(item.id)}
-                            disabled={resolveLoading}
+                            className="text-blue-600 hover:text-blue-800 text-sm"
+                            onClick={() => setSelectedInconsistency(item)}
                           >
-                            {resolveLoading ? 'Resolvendo...' : 'Resolver'}
+                            Mostrar Discrepâncias
                           </button>
                         </td>
                       </tr>
@@ -572,6 +562,187 @@ const SalesDashboard = () => {
                 </ResponsiveContainer>
               </CardContent>
             </Card>
+          </div>
+        </div>
+      )}
+
+      {/* Inconsistency Detail Modal */}
+      {selectedInconsistency && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-start mb-4">
+              <h2 className="text-xl font-bold">Detalhes da Discrepância</h2>
+              <button 
+                onClick={() => setSelectedInconsistency(null)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="space-y-6">
+              {/* Informações do Cliente */}
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h3 className="font-semibold mb-3">Informações do Cliente</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600">Nome</p>
+                    <p className="font-semibold">{selectedInconsistency.cliente}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">CPF/CNPJ</p>
+                    <p className="font-semibold">{selectedInconsistency.cpf}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tipo de Discrepância */}
+              <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
+                <h3 className="font-semibold mb-3 text-orange-800">Tipo de Discrepância</h3>
+                <p className="text-lg">{selectedInconsistency.tipo}</p>
+                <div className="mt-2">
+                  <span className={`text-sm px-2 py-1 rounded-full ${
+                    selectedInconsistency.status === 'pendente' ? 'bg-red-100 text-red-800' :
+                    selectedInconsistency.status === 'analisando' ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-blue-100 text-blue-800'
+                  }`}>
+                    Status: {selectedInconsistency.status}
+                  </span>
+                </div>
+              </div>
+
+              {/* Comparação de Valores */}
+              {selectedInconsistency.vindiValor !== undefined && (
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <h3 className="font-semibold mb-3">Comparação de Valores</h3>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-600">Valor na Vindi</p>
+                      <p className="font-semibold text-lg">R$ {selectedInconsistency.vindiValor?.toFixed(2) || '0,00'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Valor na Planilha</p>
+                      <p className="font-semibold text-lg">R$ {selectedInconsistency.planilhaValor?.toFixed(2) || '0,00'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Diferença</p>
+                      <p className="font-semibold text-lg text-red-600">
+                        R$ {Math.abs(selectedInconsistency.diferenca || 0).toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Comparação de Formas de Pagamento */}
+              {selectedInconsistency.vindiForma && (
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <h3 className="font-semibold mb-3">Formas de Pagamento</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-600">Forma na Vindi</p>
+                      <p className="font-semibold">{selectedInconsistency.vindiForma}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Forma na Planilha</p>
+                      <p className="font-semibold">{selectedInconsistency.planilhaForma}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Detalhes Adicionais */}
+              {selectedInconsistency.detalhes && (
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="font-semibold mb-3">Detalhes Adicionais</h3>
+                  
+                  {selectedInconsistency.detalhes.valorPagoVindi !== undefined && (
+                    <div className="mb-4">
+                      <p className="text-sm text-gray-600">Resumo Financeiro Vindi</p>
+                      <div className="mt-2 space-y-1">
+                        <div className="flex justify-between">
+                          <span className="text-sm">Valor Pago:</span>
+                          <span className="font-semibold text-green-600">
+                            R$ {selectedInconsistency.detalhes.valorPagoVindi?.toFixed(2) || '0,00'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm">Valor Pendente:</span>
+                          <span className="font-semibold text-orange-600">
+                            R$ {selectedInconsistency.detalhes.valorPendenteVindi?.toFixed(2) || '0,00'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm">Quantidade de Faturas:</span>
+                          <span className="font-semibold">{selectedInconsistency.detalhes.quantidadeFaturas || 0}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedInconsistency.detalhes.faturas && selectedInconsistency.detalhes.faturas.length > 0 && (
+                    <div>
+                      <p className="text-sm text-gray-600 mb-2">Faturas Detalhadas</p>
+                      <div className="space-y-2 max-h-40 overflow-y-auto">
+                        {selectedInconsistency.detalhes.faturas.map((fatura: any, index: number) => (
+                          <div key={index} className="border rounded p-2 bg-white text-sm">
+                            <div className="flex justify-between">
+                              <span>Fatura #{fatura.id}</span>
+                              <span className={`font-semibold ${
+                                fatura.status === 'paid' ? 'text-green-600' : 'text-orange-600'
+                              }`}>
+                                R$ {fatura.valor?.toFixed(2) || '0,00'}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-xs text-gray-600 mt-1">
+                              <span>Status: {fatura.status}</span>
+                              <span>Vencimento: {new Date(fatura.vencimento).toLocaleDateString('pt-BR')}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedInconsistency.detalhes.dadosPlanilha && (
+                    <div className="mt-4">
+                      <p className="text-sm text-gray-600 mb-2">Dados da Planilha</p>
+                      <div className="bg-white rounded p-3 text-sm space-y-1">
+                        {Object.entries(selectedInconsistency.detalhes.dadosPlanilha)
+                          .filter(([key, value]) => value && key !== 'cpf_cnpj')
+                          .map(([key, value]) => (
+                            <div key={key} className="flex justify-between">
+                              <span className="text-gray-600">{key.replace(/_/g, ' ').charAt(0).toUpperCase() + key.replace(/_/g, ' ').slice(1)}:</span>
+                              <span className="font-medium">{String(value)}</span>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Ações */}
+              <div className="border-t pt-4">
+                <div className="flex justify-end space-x-3">
+                  <button
+                    onClick={() => setSelectedInconsistency(null)}
+                    className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                  >
+                    Fechar
+                  </button>
+                  <button
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    onClick={() => {
+                      // Aqui você pode adicionar lógica para exportar ou processar a discrepância
+                      alert('Funcionalidade de exportação será implementada em breve');
+                    }}
+                  >
+                    Exportar Detalhes
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

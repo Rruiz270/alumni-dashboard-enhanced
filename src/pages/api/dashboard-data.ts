@@ -393,45 +393,51 @@ async function fazerCrossmatch() {
       const valorPagoVindi = customerBills.filter((b: any) => b.status === 'paid').reduce((sum: number, bill: any) => sum + parseFloat(bill.amount || 0), 0);
       const valorPendenteVindi = customerBills.filter((b: any) => b.status !== 'paid').reduce((sum: number, bill: any) => sum + parseFloat(bill.amount || 0), 0);
       
-      // REGRA 3: Detectar recorrência e detalhes de pagamento
+      // REGRA 3: Detectar vendas múltiplas vs recorrência
       const faturasPagas = customerBills.filter((b: any) => b.status === 'paid');
       const faturasPendentes = customerBills.filter((b: any) => b.status !== 'paid');
       const faturasRecorrentes = customerBills.filter((b: any) => b.subscription_id);
-      const faturasMaterial = customerBills.filter((b: any) => {
-        // Detectar material didático por descrição ou valor diferente
-        const descricao = JSON.stringify(b).toLowerCase();
-        return descricao.includes('material') || descricao.includes('didatico') || descricao.includes('apostila');
-      });
       
       const totalFaturas = customerBills.length;
       const totalRecorrentes = faturasRecorrentes.length;
-      const totalMaterial = faturasMaterial.length;
       
-      // Analisar padrão de recorrência
-      const isRecorrente = totalRecorrentes > 0 || totalFaturas > 3;
+      // Verificar se são vendas separadas ou recorrência
+      const isRecorrente = totalRecorrentes > 0;
+      const isVendasMultiplas = !isRecorrente && totalFaturas > 1;
+      
+      // Para recorrência: contar apenas faturas da subscription
+      // Para vendas múltiplas: cada fatura é uma venda separada
       const parcelasPagas = isRecorrente ? faturasPagas.filter((b: any) => b.subscription_id).length : faturasPagas.length;
       const parcelaAtual = parcelasPagas + 1;
-      const statusRecorrencia = faturasPendentes.length === 0 ? 'Completo' : 
-                               faturasPagas.length === 0 ? 'Não iniciado' : 'Em andamento';
+      
+      let statusRecorrencia = 'N/A';
+      if (isRecorrente) {
+        statusRecorrencia = faturasPendentes.filter((b: any) => b.subscription_id).length === 0 ? 'Completo' : 
+                           faturasPagas.filter((b: any) => b.subscription_id).length === 0 ? 'Não iniciado' : 'Em andamento';
+      } else if (isVendasMultiplas) {
+        statusRecorrencia = 'Múltiplas vendas';
+      } else {
+        statusRecorrencia = faturasPendentes.length === 0 ? 'Completo' : 'Pendente';
+      }
       
       // Determinar forma de pagamento detalhada
       let formaPagamentoDetalhada = primeiroRegistro.forma || 'Não informado';
-      if (isRecorrente && totalMaterial > 0) {
-        formaPagamentoDetalhada = `Recorrente (${parcelasPagas}/${totalRecorrentes}) + Material Didático - ${statusRecorrencia}`;
-      } else if (isRecorrente) {
+      
+      if (isRecorrente) {
         formaPagamentoDetalhada = `Recorrente (${parcelasPagas}/${totalRecorrentes}) - ${statusRecorrencia}`;
+      } else if (isVendasMultiplas) {
+        const datasVendas = customerBills.map((b: any) => new Date(b.created_at).toLocaleDateString('pt-BR')).join(', ');
+        formaPagamentoDetalhada = `${totalFaturas} vendas separadas - ${statusRecorrencia}`;
       } else if (totalFaturas === 1) {
-        formaPagamentoDetalhada = `Único - ${customerBills[0]?.status === 'paid' ? 'Pago' : 'Pendente'}`;
+        formaPagamentoDetalhada = `Venda única - ${customerBills[0]?.status === 'paid' ? 'Pago' : 'Pendente'}`;
       }
       
-      // Calcular valores separados (recorrência vs material)
-      const valorRecorrencia = faturasRecorrentes.reduce((sum: number, bill: any) => sum + parseFloat(bill.amount || 0), 0);
-      const valorMaterial = faturasMaterial.reduce((sum: number, bill: any) => sum + parseFloat(bill.amount || 0), 0);
-      
       console.log(`   📊 Vindi: Total R$ ${valorTotalVindi}, Pago R$ ${valorPagoVindi}, Pendente R$ ${valorPendenteVindi}`);
-      console.log(`   🔄 Recorrência: ${isRecorrente ? 'SIM' : 'NÃO'} - Status: ${statusRecorrencia}`);
+      console.log(`   🔄 Recorrência: ${isRecorrente ? 'SIM' : 'NÃO'} - Vendas múltiplas: ${isVendasMultiplas ? 'SIM' : 'NÃO'} - Status: ${statusRecorrencia}`);
       if (isRecorrente) {
-        console.log(`   📈 Parcela atual: ${parcelaAtual}/${totalFaturas}`);
+        console.log(`   📈 Parcela atual: ${parcelaAtual}/${totalRecorrentes}`);
+      } else if (isVendasMultiplas) {
+        console.log(`   🛒 Total de vendas: ${totalFaturas}`);
       }
       
       // Criar registro do cliente consolidado
@@ -452,6 +458,7 @@ async function fazerCrossmatch() {
         valorPlanilha: valorTotalPlanilha,
         // Novos campos para detalhamento
         isRecorrente,
+        isVendasMultiplas,
         statusRecorrencia,
         parcelaAtual: isRecorrente ? parcelaAtual : 1,
         totalParcelas: totalFaturas,
@@ -460,7 +467,13 @@ async function fazerCrossmatch() {
           pagas: faturasPagas.length,
           pendentes: faturasPendentes.length,
           total: totalFaturas,
-          ultimoPagamento: faturasPagas.length > 0 ? faturasPagas[faturasPagas.length - 1].created_at : null
+          ultimoPagamento: faturasPagas.length > 0 ? faturasPagas[faturasPagas.length - 1].created_at : null,
+          datasVendas: customerBills.map((b: any) => ({
+            data: new Date(b.created_at).toLocaleDateString('pt-BR'),
+            valor: parseFloat(b.amount),
+            status: b.status,
+            isRecorrencia: !!b.subscription_id
+          }))
         }
       };
       
@@ -468,8 +481,10 @@ async function fazerCrossmatch() {
       
       // Verificar inconsistências de valor (considerando valores consolidados)
       const diferencaValor = Math.abs(valorTotalVindi - valorTotalPlanilha);
-      if (diferencaValor > 0.01) {
-        console.log(`⚠️  INCONSISTÊNCIA DE VALOR: Vindi R$ ${valorTotalVindi} vs Planilha R$ ${valorTotalPlanilha}`);
+      const tolerancia = 1.00; // Tolerância de R$ 1,00 para diferenças mínimas
+      
+      if (diferencaValor > tolerancia) {
+        console.log(`⚠️  INCONSISTÊNCIA DE VALOR: Vindi R$ ${valorTotalVindi} vs Planilha R$ ${valorTotalPlanilha} (Diferença: R$ ${diferencaValor.toFixed(2)})`);
         
         inconsistencies.push({
           id: inconsistencyId++,
@@ -503,20 +518,44 @@ async function fazerCrossmatch() {
         });
       }
       
-      // Inconsistência de recorrência mal configurada
-      if (registrosParaProcessar.length > 1 && !isRecorrente) {
+      // Verificar cliente inadimplente
+      if (valorPendenteVindi > 0) {
         inconsistencies.push({
           id: inconsistencyId++,
           cpf: primeiroRegistro['cpf/cnpj'],
           cliente: primeiroRegistro.nome,
-          tipo: 'Múltiplos registros na planilha mas pagamento único na Vindi',
+          tipo: 'Cliente inadimplente',
+          vindiValor: valorTotalVindi,
+          planilhaValor: valorTotalPlanilha,
+          diferenca: valorPendenteVindi,
+          status: 'pendente',
+          detalhes: {
+            valorPendente: valorPendenteVindi,
+            faturasPendentes: faturasPendentes.length,
+            isRecorrente,
+            statusRecorrencia
+          }
+        });
+      }
+      
+      // Verificar inconsistência de vendas múltiplas vs planilha única
+      if (isVendasMultiplas && registrosParaProcessar.length === 1) {
+        inconsistencies.push({
+          id: inconsistencyId++,
+          cpf: primeiroRegistro['cpf/cnpj'],
+          cliente: primeiroRegistro.nome,
+          tipo: 'Múltiplas vendas na Vindi mas registro único na planilha',
           planilhaValor: valorTotalPlanilha,
           vindiValor: valorTotalVindi,
           status: 'analisando',
           detalhes: {
+            vendasNaVindi: totalFaturas,
             registrosNaPlanilha: registrosParaProcessar.length,
-            faturasNaVindi: customerBills.length,
-            sugestao: 'Verificar se deveria ser recorrente'
+            datasVendas: customerBills.map((b: any) => ({
+              data: new Date(b.created_at).toLocaleDateString('pt-BR'),
+              valor: b.amount,
+              status: b.status
+            }))
           }
         });
       }

@@ -128,7 +128,13 @@ async function buscarDadosReaisPlanilha(): Promise<SpreadsheetRow[]> {
 
 function normalizeCPF(cpf: string): string {
   if (!cpf) return '';
-  return cpf.replace(/[^0-9]/g, '');
+  // Remove tudo que não é número
+  const normalized = cpf.replace(/[^0-9]/g, '');
+  // CPF deve ter exatamente 11 dígitos, CNPJ 14
+  if (normalized.length === 11 || normalized.length === 14) {
+    return normalized;
+  }
+  return ''; // Retorna vazio se não for um CPF/CNPJ válido
 }
 
 function normalizeNome(nome: string): string {
@@ -138,6 +144,23 @@ function normalizeNome(nome: string): string {
     .replace(/[\u0300-\u036f]/g, '') // Remove acentos
     .replace(/[^a-z0-9\s]/g, '') // Remove caracteres especiais
     .trim();
+}
+
+function calculateCpfSimilarity(cpf1: string, cpf2: string): number {
+  if (!cpf1 || !cpf2) return 0;
+  if (cpf1 === cpf2) return 100;
+  
+  // Calcular similaridade caracter por caracter
+  const maxLength = Math.max(cpf1.length, cpf2.length);
+  let matches = 0;
+  
+  for (let i = 0; i < maxLength; i++) {
+    if (cpf1[i] === cpf2[i]) {
+      matches++;
+    }
+  }
+  
+  return Math.round((matches / maxLength) * 100);
 }
 
 async function buscarVindiCustomers() {
@@ -273,15 +296,25 @@ async function fazerCrossmatch() {
   const vindiMapCPF = new Map();
   const vindiMapNome = new Map();
   
+  console.log('🔍 Mapeando clientes Vindi...');
+  
   vindiCustomers.forEach((customer: any) => {
     const cpf = normalizeCPF(customer.registry_code || customer.code || '');
     const nome = normalizeNome(customer.name || '');
+    
+    // Debug dos primeiros 5 clientes
+    if (vindiMapCPF.size < 5) {
+      console.log(`Cliente Vindi: ${customer.name}`);
+      console.log(`  CPF original: ${customer.registry_code || customer.code}`);
+      console.log(`  CPF normalizado: ${cpf}`);
+      console.log(`  Nome normalizado: ${nome}`);
+    }
     
     if (cpf) {
       vindiMapCPF.set(cpf, customer);
     }
     
-    if (nome) {
+    if (nome && nome.length >= 3) { // Nome deve ter pelo menos 3 caracteres
       // Se já existe alguém com o mesmo nome, adicionar em array
       if (!vindiMapNome.has(nome)) {
         vindiMapNome.set(nome, []);
@@ -314,12 +347,25 @@ async function fazerCrossmatch() {
   console.log(`\n🔄 CONSOLIDANDO DADOS DA PLANILHA POR CPF...`);
   const dadosConsolidados = new Map();
   
+  console.log('🔍 Mapeando dados da planilha...');
+  
   dadosPlanilha.forEach((linha, index) => {
     const cpfPlanilha = normalizeCPF(linha['cpf/cnpj'] || '');
     const valorPlanilhaStr = linha.valor_total || '0';
     const valorPlanilha = parseFloat(valorPlanilhaStr.replace(/[R$.,\s]/g, '').replace(',', '.')) / 100;
     
-    if (!cpfPlanilha) return; // Pular linhas sem CPF
+    // Debug dos primeiros 5 registros da planilha
+    if (dadosConsolidados.size < 5) {
+      console.log(`Planilha: ${linha.nome}`);
+      console.log(`  CPF original: ${linha['cpf/cnpj']}`);
+      console.log(`  CPF normalizado: ${cpfPlanilha}`);
+      console.log(`  Valor: R$ ${valorPlanilha}`);
+    }
+    
+    if (!cpfPlanilha) {
+      console.log(`⚠️ CPF inválido ignorado: ${linha['cpf/cnpj']} -> ${cpfPlanilha}`);
+      return; // Pular linhas sem CPF válido
+    }
     
     if (!dadosConsolidados.has(cpfPlanilha)) {
       dadosConsolidados.set(cpfPlanilha, []);
@@ -336,7 +382,20 @@ async function fazerCrossmatch() {
   
   // Processar cada CPF consolidado
   dadosConsolidados.forEach((registros, cpfPlanilha) => {
-    console.log(`\n📝 Processando CPF ${cpfPlanilha} - ${registros.length} registro(s)`);
+    const nomeExemplo = registros[0]?.nome || '';
+    console.log(`\n📝 Processando CPF ${cpfPlanilha} - ${registros.length} registro(s) - ${nomeExemplo}`);
+    
+    // Debug específico para casos problemáticos
+    if (nomeExemplo.toLowerCase().includes('marcia') || nomeExemplo.toLowerCase().includes('bernardello')) {
+      console.log(`🔍 DEBUG MARCIA BERNARDELLO:`);
+      console.log(`   CPF planilha: ${cpfPlanilha}`);
+      console.log(`   Existe no map Vindi?: ${vindiMapCPF.has(cpfPlanilha)}`);
+      console.log(`   Total CPFs no map Vindi: ${vindiMapCPF.size}`);
+      
+      // Mostrar alguns CPFs do Vindi para comparação
+      const vindiCpfs = Array.from(vindiMapCPF.keys()).slice(0, 5);
+      console.log(`   Primeiros 5 CPFs Vindi: ${vindiCpfs.join(', ')}`);
+    }
     
     // REGRA 1: Priorizar registros com valores vs vazios
     const registrosComValor = registros.filter((r: any) => r.valorPlanilha > 0);
@@ -366,26 +425,60 @@ async function fazerCrossmatch() {
     
     // Tentar buscar por CPF primeiro
     let vindiCustomer = vindiMapCPF.get(cpfPlanilha);
+    let matchMethod = '';
     
-    // Se não encontrou por CPF, tentar por nome
-    if (!vindiCustomer) {
+    if (vindiCustomer) {
+      matchMethod = 'CPF';
+      console.log(`   ✅ MATCH por CPF: ${cpfPlanilha}`);
+    } else {
+      console.log(`   ❌ CPF não encontrado na Vindi: ${cpfPlanilha}`);
+      
+      // Se não encontrou por CPF, tentar por nome
       const nomeNormalizado = normalizeNome(primeiroRegistro.nome || '');
       const clientesPorNome = vindiMapNome.get(nomeNormalizado) || [];
       
       if (clientesPorNome.length > 0) {
-        // Se encontrou por nome, usar o primeiro (ou o que tem CPF mais similar)
-        vindiCustomer = clientesPorNome[0];
-        console.log(`   🔍 CPF não encontrado, mas MATCH por nome: ${primeiroRegistro.nome}`);
+        // Verificar se algum dos clientes com nome similar tem CPF parecido
+        let melhorMatch = null;
+        let melhorScore = 0;
         
-        // Se encontrou múltiplos, avisar
-        if (clientesPorNome.length > 1) {
-          console.log(`   ⚠️  Múltiplos clientes Vindi com nome similar: ${clientesPorNome.length}`);
+        for (const candidate of clientesPorNome) {
+          const candidateCpf = normalizeCPF(candidate.registry_code || candidate.code || '');
+          
+          // Verificar similaridade de CPF (caso tenha erro de digitação)
+          if (candidateCpf) {
+            const similarity = calculateCpfSimilarity(cpfPlanilha, candidateCpf);
+            console.log(`     Comparando CPF: ${cpfPlanilha} vs ${candidateCpf} = ${similarity}%`);
+            
+            if (similarity > 80) { // 80% de similaridade mínima
+              if (similarity > melhorScore) {
+                melhorScore = similarity;
+                melhorMatch = candidate;
+                matchMethod = `CPF_SIMILAR_${similarity}%`;
+              }
+            }
+          }
+        }
+        
+        if (!melhorMatch) {
+          // Se não encontrou CPF similar, usar o primeiro por nome
+          vindiCustomer = clientesPorNome[0];
+          matchMethod = 'NOME';
+          console.log(`   🔍 CPF não encontrado, mas MATCH por nome: ${primeiroRegistro.nome}`);
+          
+          // Se encontrou múltiplos, avisar
+          if (clientesPorNome.length > 1) {
+            console.log(`   ⚠️  Múltiplos clientes Vindi com nome similar: ${clientesPorNome.length}`);
+          }
+        } else {
+          vindiCustomer = melhorMatch;
+          console.log(`   🎯 MATCH por CPF similar (${melhorScore}%): ${primeiroRegistro.nome}`);
         }
       }
     }
     
     if (vindiCustomer) {
-      console.log(`✅ MATCH encontrado: ${primeiroRegistro.nome} <-> ${vindiCustomer.name}`);
+      console.log(`✅ MATCH encontrado (${matchMethod}): ${primeiroRegistro.nome} <-> ${vindiCustomer.name}`);
       
       // Buscar faturas do cliente na Vindi
       const customerBills = billsMap.get(vindiCustomer.id) || [];
@@ -456,6 +549,7 @@ async function fazerCrossmatch() {
         dataVenda: dataVendaMaisRecente,
         hasVindiMatch: true,
         valorPlanilha: valorTotalPlanilha,
+        matchMethod, // Como foi encontrado o match
         // Novos campos para detalhamento
         isRecorrente,
         isVendasMultiplas,
@@ -481,10 +575,18 @@ async function fazerCrossmatch() {
       
       // Verificar inconsistências de valor (considerando valores consolidados)
       const diferencaValor = Math.abs(valorTotalVindi - valorTotalPlanilha);
-      const tolerancia = 1.00; // Tolerância de R$ 1,00 para diferenças mínimas
+      const tolerancia = 5.00; // Aumentar tolerância para R$ 5,00 para reduzir falsos positivos
+      const percentualTolerancia = 0.05; // 5% de tolerância percentual
       
-      if (diferencaValor > tolerancia) {
-        console.log(`⚠️  INCONSISTÊNCIA DE VALOR: Vindi R$ ${valorTotalVindi} vs Planilha R$ ${valorTotalPlanilha} (Diferença: R$ ${diferencaValor.toFixed(2)})`);
+      // Só considerar inconsistência se for significativa em valor absoluto E percentual
+      const diferencaPercentual = valorTotalPlanilha > 0 ? (diferencaValor / valorTotalPlanilha) : 1;
+      const isInconsistenciaSignificativa = diferencaValor > tolerancia && diferencaPercentual > percentualTolerancia;
+      
+      // Não considerar inconsistência se match foi feito apenas por nome (muito impreciso)
+      const isMatchConfiavel = matchMethod !== 'NOME';
+      
+      if (isInconsistenciaSignificativa && isMatchConfiavel) {
+        console.log(`⚠️  INCONSISTÊNCIA DE VALOR SIGNIFICATIVA: Vindi R$ ${valorTotalVindi} vs Planilha R$ ${valorTotalPlanilha} (Diferença: R$ ${diferencaValor.toFixed(2)} = ${(diferencaPercentual * 100).toFixed(1)}%)`);
         
         inconsistencies.push({
           id: inconsistencyId++,
@@ -502,6 +604,8 @@ async function fazerCrossmatch() {
             registrosConsolidados: registrosParaProcessar.length,
             isRecorrente,
             statusRecorrencia,
+            matchMethod,
+            diferencaPercentual: diferencaPercentual * 100,
             faturas: customerBills.map((b: any) => ({
               id: b.id,
               valor: b.amount,
@@ -516,6 +620,8 @@ async function fazerCrossmatch() {
             }))
           }
         });
+      } else if (diferencaValor > 0) {
+        console.log(`ℹ️  Diferença pequena ignorada: Vindi R$ ${valorTotalVindi} vs Planilha R$ ${valorTotalPlanilha} (Diferença: R$ ${diferencaValor.toFixed(2)} = ${(diferencaPercentual * 100).toFixed(1)}%) - Match: ${matchMethod}`);
       }
       
       // Verificar cliente inadimplente
@@ -587,19 +693,26 @@ async function fazerCrossmatch() {
       
       customers.push(customer);
       
-      // Inconsistência - cliente não encontrado na Vindi
-      inconsistencies.push({
-        id: inconsistencyId++,
-        cpf: primeiroRegistro['cpf/cnpj'],
-        cliente: primeiroRegistro.nome,
-        tipo: 'Cliente não encontrado na Vindi',
-        planilhaValor: valorTotalPlanilha,
-        status: 'pendente',
-        detalhes: {
-          registrosConsolidados: registrosParaProcessar.length,
-          dadosPlanilha: registrosParaProcessar
-        }
-      });
+      // Só considerar inconsistência se valor for significativo (> R$ 50,00)
+      if (valorTotalPlanilha > 50.00) {
+        console.log(`❌ Cliente com valor significativo não encontrado na Vindi: ${primeiroRegistro.nome} (R$ ${valorTotalPlanilha})`);
+        
+        // Inconsistência - cliente não encontrado na Vindi
+        inconsistencies.push({
+          id: inconsistencyId++,
+          cpf: primeiroRegistro['cpf/cnpj'],
+          cliente: primeiroRegistro.nome,
+          tipo: 'Cliente não encontrado na Vindi',
+          planilhaValor: valorTotalPlanilha,
+          status: 'pendente',
+          detalhes: {
+            registrosConsolidados: registrosParaProcessar.length,
+            dadosPlanilha: registrosParaProcessar
+          }
+        });
+      } else {
+        console.log(`ℹ️  Cliente com valor baixo ignorado: ${primeiroRegistro.nome} (R$ ${valorTotalPlanilha})`);
+      }
       
       // Inconsistência adicional se há registros duplicados
       if (registrosParaProcessar.length > 1) {
@@ -621,29 +734,44 @@ async function fazerCrossmatch() {
     }
   });
   
-  // Verificar clientes que estão só na Vindi
+  // Verificar clientes que estão só na Vindi (com mais critério)
+  console.log(`\n🔍 VERIFICANDO CLIENTES SÓ NA VINDI...`);
+  let clientesSoVindi = 0;
+  
   vindiCustomers.forEach((vindiCustomer: any) => {
     const cpfVindi = normalizeCPF(vindiCustomer.registry_code || vindiCustomer.code || '');
     const existeNaPlanilha = dadosConsolidados.has(cpfVindi);
     
-    if (!existeNaPlanilha && cpfVindi) {
-      console.log(`❌ Cliente só na Vindi: ${vindiCustomer.name} (CPF: ${cpfVindi})`);
-      
+    if (!existeNaPlanilha && cpfVindi && cpfVindi.length >= 11) {
       const customerBills = billsMap.get(vindiCustomer.id) || [];
       const valorTotal = customerBills.reduce((sum: number, bill: any) => sum + parseFloat(bill.amount || 0), 0);
+      const billsPagas = customerBills.filter((b: any) => b.status === 'paid');
       
-      if (valorTotal > 0) {
+      // Só considerar inconsistência se tem faturas pagas significativas
+      if (valorTotal > 100.00 && billsPagas.length > 0) {
+        console.log(`❌ Cliente significativo só na Vindi: ${vindiCustomer.name} (CPF: ${cpfVindi}) - R$ ${valorTotal}`);
+        clientesSoVindi++;
+        
         inconsistencies.push({
           id: inconsistencyId++,
           cpf: vindiCustomer.registry_code || vindiCustomer.code,
           cliente: vindiCustomer.name,
           tipo: 'Cliente não encontrado na planilha',
           vindiValor: valorTotal,
-          status: 'aguardando'
+          status: 'aguardando',
+          detalhes: {
+            faturasPagas: billsPagas.length,
+            faturasTotal: customerBills.length,
+            valorPago: billsPagas.reduce((sum: number, bill: any) => sum + parseFloat(bill.amount || 0), 0)
+          }
         });
+      } else if (valorTotal > 0) {
+        console.log(`ℹ️  Cliente com valor baixo ou sem pagamentos ignorado: ${vindiCustomer.name} (R$ ${valorTotal})`);
       }
     }
   });
+  
+  console.log(`📊 Clientes significativos só na Vindi: ${clientesSoVindi}`);
   
   // Calcular totais
   const totalRevenue = customers.reduce((sum, c) => sum + c.valorTotal, 0);

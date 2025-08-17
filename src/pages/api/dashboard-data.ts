@@ -69,7 +69,7 @@ async function buscarDadosReaisPlanilha(): Promise<SpreadsheetRow[]> {
             // Parse data rows
             const data: SpreadsheetRow[] = [];
             
-            for (let i = 1; i < Math.min(lines.length, 101); i++) { // Máximo 100 linhas para teste
+            for (let i = 1; i < lines.length; i++) { // Processar TODAS as linhas
               const line = lines[i];
               if (!line.trim()) continue;
               
@@ -131,6 +131,15 @@ function normalizeCPF(cpf: string): string {
   return cpf.replace(/[^0-9]/g, '');
 }
 
+function normalizeNome(nome: string): string {
+  if (!nome) return '';
+  return nome.toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Remove acentos
+    .replace(/[^a-z0-9\s]/g, '') // Remove caracteres especiais
+    .trim();
+}
+
 async function buscarVindiCustomers() {
   const VINDI_API_KEY = process.env.VINDI_API_KEY;
   
@@ -140,25 +149,46 @@ async function buscarVindiCustomers() {
   }
 
   try {
-    console.log('🔍 Buscando clientes REAIS da Vindi...');
+    console.log('🔍 Buscando TODOS os clientes da Vindi...');
     
     const headers = {
       'Authorization': `Basic ${Buffer.from(VINDI_API_KEY + ':').toString('base64')}`,
       'Content-Type': 'application/json',
     };
 
-    // Buscar customers
-    const customersResponse = await fetch('https://app.vindi.com.br/api/v1/customers?per_page=100', { headers });
+    let allCustomers = [];
+    let page = 1;
+    let hasMorePages = true;
     
-    if (!customersResponse.ok) {
-      console.log('❌ Erro Vindi Customers API:', customersResponse.status);
-      return [];
+    // Buscar TODAS as páginas de clientes
+    while (hasMorePages) {
+      const customersResponse = await fetch(`https://app.vindi.com.br/api/v1/customers?page=${page}&per_page=100`, { headers });
+      
+      if (!customersResponse.ok) {
+        console.log(`❌ Erro Vindi Customers API página ${page}:`, customersResponse.status);
+        break;
+      }
+      
+      const customersData = await customersResponse.json();
+      const customers = customersData.customers || [];
+      
+      if (customers.length === 0) {
+        hasMorePages = false;
+      } else {
+        allCustomers = allCustomers.concat(customers);
+        console.log(`📄 Página ${page}: ${customers.length} clientes (Total: ${allCustomers.length})`);
+        page++;
+        
+        // Verificar se há mais páginas
+        if (customers.length < 100) {
+          hasMorePages = false;
+        }
+      }
     }
     
-    const customersData = await customersResponse.json();
-    console.log(`✅ ${customersData.customers?.length || 0} clientes reais obtidos da Vindi`);
+    console.log(`✅ TOTAL: ${allCustomers.length} clientes obtidos da Vindi`);
     
-    return customersData.customers || [];
+    return allCustomers;
   } catch (error) {
     console.error('❌ Erro ao buscar Vindi:', error);
     return [];
@@ -173,24 +203,46 @@ async function buscarVindiBills() {
   }
 
   try {
-    console.log('💰 Buscando faturas REAIS da Vindi...');
+    console.log('💰 Buscando TODAS as faturas da Vindi...');
     
     const headers = {
       'Authorization': `Basic ${Buffer.from(VINDI_API_KEY + ':').toString('base64')}`,
       'Content-Type': 'application/json',
     };
 
-    const billsResponse = await fetch('https://app.vindi.com.br/api/v1/bills?per_page=100', { headers });
+    let allBills = [];
+    let page = 1;
+    let hasMorePages = true;
     
-    if (!billsResponse.ok) {
-      console.log('❌ Erro Vindi Bills API:', billsResponse.status);
-      return [];
+    // Buscar TODAS as páginas de faturas
+    while (hasMorePages) {
+      const billsResponse = await fetch(`https://app.vindi.com.br/api/v1/bills?page=${page}&per_page=100`, { headers });
+      
+      if (!billsResponse.ok) {
+        console.log(`❌ Erro Vindi Bills API página ${page}:`, billsResponse.status);
+        break;
+      }
+      
+      const billsData = await billsResponse.json();
+      const bills = billsData.bills || [];
+      
+      if (bills.length === 0) {
+        hasMorePages = false;
+      } else {
+        allBills = allBills.concat(bills);
+        console.log(`📄 Página ${page}: ${bills.length} faturas (Total: ${allBills.length})`);
+        page++;
+        
+        // Verificar se há mais páginas
+        if (bills.length < 100) {
+          hasMorePages = false;
+        }
+      }
     }
     
-    const billsData = await billsResponse.json();
-    console.log(`✅ ${billsData.bills?.length || 0} faturas reais obtidas da Vindi`);
+    console.log(`✅ TOTAL: ${allBills.length} faturas obtidas da Vindi`);
     
-    return billsData.bills || [];
+    return allBills;
   } catch (error) {
     console.error('❌ Erro ao buscar bills Vindi:', error);
     return [];
@@ -217,15 +269,28 @@ async function fazerCrossmatch() {
     return gerarDadosExemplo();
   }
   
-  // Mapear clientes Vindi por CPF normalizado
-  const vindiMap = new Map();
+  // Mapear clientes Vindi por CPF e Nome normalizados
+  const vindiMapCPF = new Map();
+  const vindiMapNome = new Map();
+  
   vindiCustomers.forEach((customer: any) => {
     const cpf = normalizeCPF(customer.registry_code || customer.code || '');
+    const nome = normalizeNome(customer.name || '');
+    
     if (cpf) {
-      vindiMap.set(cpf, customer);
-      console.log(`📋 Mapeado Vindi: CPF ${cpf} -> ${customer.name}`);
+      vindiMapCPF.set(cpf, customer);
+    }
+    
+    if (nome) {
+      // Se já existe alguém com o mesmo nome, adicionar em array
+      if (!vindiMapNome.has(nome)) {
+        vindiMapNome.set(nome, []);
+      }
+      vindiMapNome.get(nome).push(customer);
     }
   });
+  
+  console.log(`📋 Mapeados ${vindiMapCPF.size} CPFs únicos e ${vindiMapNome.size} nomes únicos da Vindi`);
   
   // Mapear faturas por cliente
   const billsMap = new Map();
@@ -296,10 +361,30 @@ async function fazerCrossmatch() {
     console.log(`   💰 Valor total consolidado: R$ ${valorTotalPlanilha.toFixed(2)}`);
     console.log(`   📦 Produtos: ${produtosCombinados}`);
     
-    const vindiCustomer = vindiMap.get(cpfPlanilha);
+    // Pegar primeiro registro para referência
+    const primeiroRegistro = registrosParaProcessar[0];
+    
+    // Tentar buscar por CPF primeiro
+    let vindiCustomer = vindiMapCPF.get(cpfPlanilha);
+    
+    // Se não encontrou por CPF, tentar por nome
+    if (!vindiCustomer) {
+      const nomeNormalizado = normalizeNome(primeiroRegistro.nome || '');
+      const clientesPorNome = vindiMapNome.get(nomeNormalizado) || [];
+      
+      if (clientesPorNome.length > 0) {
+        // Se encontrou por nome, usar o primeiro (ou o que tem CPF mais similar)
+        vindiCustomer = clientesPorNome[0];
+        console.log(`   🔍 CPF não encontrado, mas MATCH por nome: ${primeiroRegistro.nome}`);
+        
+        // Se encontrou múltiplos, avisar
+        if (clientesPorNome.length > 1) {
+          console.log(`   ⚠️  Múltiplos clientes Vindi com nome similar: ${clientesPorNome.length}`);
+        }
+      }
+    }
     
     if (vindiCustomer) {
-      const primeiroRegistro = registrosParaProcessar[0];
       console.log(`✅ MATCH encontrado: ${primeiroRegistro.nome} <-> ${vindiCustomer.name}`);
       
       // Buscar faturas do cliente na Vindi
@@ -311,21 +396,37 @@ async function fazerCrossmatch() {
       // REGRA 3: Detectar recorrência e detalhes de pagamento
       const faturasPagas = customerBills.filter((b: any) => b.status === 'paid');
       const faturasPendentes = customerBills.filter((b: any) => b.status !== 'paid');
+      const faturasRecorrentes = customerBills.filter((b: any) => b.subscription_id);
+      const faturasMaterial = customerBills.filter((b: any) => {
+        // Detectar material didático por descrição ou valor diferente
+        const descricao = JSON.stringify(b).toLowerCase();
+        return descricao.includes('material') || descricao.includes('didatico') || descricao.includes('apostila');
+      });
+      
       const totalFaturas = customerBills.length;
+      const totalRecorrentes = faturasRecorrentes.length;
+      const totalMaterial = faturasMaterial.length;
       
       // Analisar padrão de recorrência
-      const isRecorrente = totalFaturas > 1;
-      const parcelaAtual = faturasPagas.length + 1;
+      const isRecorrente = totalRecorrentes > 0 || totalFaturas > 3;
+      const parcelasPagas = isRecorrente ? faturasPagas.filter((b: any) => b.subscription_id).length : faturasPagas.length;
+      const parcelaAtual = parcelasPagas + 1;
       const statusRecorrencia = faturasPendentes.length === 0 ? 'Completo' : 
                                faturasPagas.length === 0 ? 'Não iniciado' : 'Em andamento';
       
       // Determinar forma de pagamento detalhada
       let formaPagamentoDetalhada = primeiroRegistro.forma || 'Não informado';
-      if (isRecorrente) {
-        formaPagamentoDetalhada = `Recorrente (${parcelaAtual}/${totalFaturas}) - ${statusRecorrencia}`;
+      if (isRecorrente && totalMaterial > 0) {
+        formaPagamentoDetalhada = `Recorrente (${parcelasPagas}/${totalRecorrentes}) + Material Didático - ${statusRecorrencia}`;
+      } else if (isRecorrente) {
+        formaPagamentoDetalhada = `Recorrente (${parcelasPagas}/${totalRecorrentes}) - ${statusRecorrencia}`;
       } else if (totalFaturas === 1) {
         formaPagamentoDetalhada = `Único - ${customerBills[0]?.status === 'paid' ? 'Pago' : 'Pendente'}`;
       }
+      
+      // Calcular valores separados (recorrência vs material)
+      const valorRecorrencia = faturasRecorrentes.reduce((sum: number, bill: any) => sum + parseFloat(bill.amount || 0), 0);
+      const valorMaterial = faturasMaterial.reduce((sum: number, bill: any) => sum + parseFloat(bill.amount || 0), 0);
       
       console.log(`   📊 Vindi: Total R$ ${valorTotalVindi}, Pago R$ ${valorPagoVindi}, Pendente R$ ${valorPendenteVindi}`);
       console.log(`   🔄 Recorrência: ${isRecorrente ? 'SIM' : 'NÃO'} - Status: ${statusRecorrencia}`);

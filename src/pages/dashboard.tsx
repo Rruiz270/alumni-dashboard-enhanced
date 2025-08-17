@@ -343,7 +343,10 @@ const SalesDashboard = () => {
                         <td className="p-2">
                           <button 
                             className="text-blue-600 hover:text-blue-800 text-sm"
-                            onClick={() => setSelectedInconsistency(item)}
+                            onClick={() => {
+                              console.log('Mostrando discrepância:', item);
+                              setSelectedInconsistency(item);
+                            }}
                           >
                             Mostrar Discrepâncias
                           </button>

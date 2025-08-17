@@ -245,97 +245,204 @@ async function fazerCrossmatch() {
   
   console.log(`\n🔄 PROCESSANDO CROSSMATCH...`);
   
-  // Processar cada linha da planilha
+  // Consolidar dados da planilha por CPF (resolver duplicatas)
+  console.log(`\n🔄 CONSOLIDANDO DADOS DA PLANILHA POR CPF...`);
+  const dadosConsolidados = new Map();
+  
   dadosPlanilha.forEach((linha, index) => {
     const cpfPlanilha = normalizeCPF(linha['cpf/cnpj'] || '');
     const valorPlanilhaStr = linha.valor_total || '0';
-    const valorPlanilha = parseFloat(valorPlanilhaStr.replace(/[R$.,\s]/g, '').replace(',', '.')) / 100; // Converter de centavos
+    const valorPlanilha = parseFloat(valorPlanilhaStr.replace(/[R$.,\s]/g, '').replace(',', '.')) / 100;
     
     if (!cpfPlanilha) return; // Pular linhas sem CPF
     
-    console.log(`\n📝 Linha ${index + 1}: CPF ${cpfPlanilha} - ${linha.nome}`);
-    console.log(`   Valor planilha: R$ ${valorPlanilha.toFixed(2)}`);
+    if (!dadosConsolidados.has(cpfPlanilha)) {
+      dadosConsolidados.set(cpfPlanilha, []);
+    }
+    
+    dadosConsolidados.get(cpfPlanilha).push({
+      ...linha,
+      valorPlanilha,
+      linhaIndex: index
+    });
+  });
+  
+  console.log(`📊 Encontrados ${dadosConsolidados.size} CPFs únicos na planilha`);
+  
+  // Processar cada CPF consolidado
+  dadosConsolidados.forEach((registros, cpfPlanilha) => {
+    console.log(`\n📝 Processando CPF ${cpfPlanilha} - ${registros.length} registro(s)`);
+    
+    // REGRA 1: Priorizar registros com valores vs vazios
+    const registrosComValor = registros.filter((r: any) => r.valorPlanilha > 0);
+    const registrosSemValor = registros.filter((r: any) => r.valorPlanilha === 0);
+    
+    let registrosParaProcessar = registrosComValor.length > 0 ? registrosComValor : registrosSemValor;
+    
+    if (registrosComValor.length > 0 && registrosSemValor.length > 0) {
+      console.log(`   ⚠️  CPF tem ${registrosComValor.length} com valor e ${registrosSemValor.length} sem valor - priorizando com valor`);
+    }
+    
+    // REGRA 2: Consolidar histórico completo quando múltiplos pagamentos
+    const valorTotalPlanilha = registrosParaProcessar.reduce((sum: number, r: any) => sum + r.valorPlanilha, 0);
+    const produtos = registrosParaProcessar.map((r: any) => r.produto).filter((p: any) => p);
+    const produtosCombinados = Array.from(new Set(produtos)).join(', ');
+    const dataVendaMaisRecente = registrosParaProcessar
+      .map((r: any) => r.data_venda || r.data_transacao)
+      .filter((d: any) => d)
+      .sort()
+      .pop() || '';
+    
+    console.log(`   💰 Valor total consolidado: R$ ${valorTotalPlanilha.toFixed(2)}`);
+    console.log(`   📦 Produtos: ${produtosCombinados}`);
     
     const vindiCustomer = vindiMap.get(cpfPlanilha);
     
     if (vindiCustomer) {
-      console.log(`✅ MATCH encontrado: ${linha.nome} <-> ${vindiCustomer.name}`);
+      const primeiroRegistro = registrosParaProcessar[0];
+      console.log(`✅ MATCH encontrado: ${primeiroRegistro.nome} <-> ${vindiCustomer.name}`);
       
-      // Buscar faturas do cliente
+      // Buscar faturas do cliente na Vindi
       const customerBills = billsMap.get(vindiCustomer.id) || [];
       const valorTotalVindi = customerBills.reduce((sum: number, bill: any) => sum + parseFloat(bill.amount || 0), 0);
       const valorPagoVindi = customerBills.filter((b: any) => b.status === 'paid').reduce((sum: number, bill: any) => sum + parseFloat(bill.amount || 0), 0);
       const valorPendenteVindi = customerBills.filter((b: any) => b.status !== 'paid').reduce((sum: number, bill: any) => sum + parseFloat(bill.amount || 0), 0);
       
-      console.log(`   Vindi: Total R$ ${valorTotalVindi}, Pago R$ ${valorPagoVindi}, Pendente R$ ${valorPendenteVindi}`);
+      // REGRA 3: Detectar recorrência e detalhes de pagamento
+      const faturasPagas = customerBills.filter((b: any) => b.status === 'paid');
+      const faturasPendentes = customerBills.filter((b: any) => b.status !== 'paid');
+      const totalFaturas = customerBills.length;
       
-      // Criar registro do cliente
+      // Analisar padrão de recorrência
+      const isRecorrente = totalFaturas > 1;
+      const parcelaAtual = faturasPagas.length + 1;
+      const statusRecorrencia = faturasPendentes.length === 0 ? 'Completo' : 
+                               faturasPagas.length === 0 ? 'Não iniciado' : 'Em andamento';
+      
+      // Determinar forma de pagamento detalhada
+      let formaPagamentoDetalhada = primeiroRegistro.forma || 'Não informado';
+      if (isRecorrente) {
+        formaPagamentoDetalhada = `Recorrente (${parcelaAtual}/${totalFaturas}) - ${statusRecorrencia}`;
+      } else if (totalFaturas === 1) {
+        formaPagamentoDetalhada = `Único - ${customerBills[0]?.status === 'paid' ? 'Pago' : 'Pendente'}`;
+      }
+      
+      console.log(`   📊 Vindi: Total R$ ${valorTotalVindi}, Pago R$ ${valorPagoVindi}, Pendente R$ ${valorPendenteVindi}`);
+      console.log(`   🔄 Recorrência: ${isRecorrente ? 'SIM' : 'NÃO'} - Status: ${statusRecorrencia}`);
+      if (isRecorrente) {
+        console.log(`   📈 Parcela atual: ${parcelaAtual}/${totalFaturas}`);
+      }
+      
+      // Criar registro do cliente consolidado
       const customer = {
         id: vindiCustomer.id,
-        nome: linha.nome || vindiCustomer.name,
-        cpf_cnpj: linha['cpf/cnpj'],
-        email: vindiCustomer.email || linha.cliente || '',
-        produto: linha.produto || 'Curso',
+        nome: primeiroRegistro.nome || vindiCustomer.name,
+        cpf_cnpj: primeiroRegistro['cpf/cnpj'],
+        email: vindiCustomer.email || primeiroRegistro.cliente || '',
+        produto: produtosCombinados || 'Curso',
         valorTotal: valorTotalVindi,
         valorPago: valorPagoVindi,
         valorPendente: valorPendenteVindi,
         status: valorPendenteVindi > 0 ? 'Pendente' : 'Em dia',
-        formaPagamento: linha.forma || 'Não informado',
-        parcelas: linha.parcelas || '1x',
-        dataVenda: linha.data_venda || linha.data_transacao || '',
+        formaPagamento: formaPagamentoDetalhada,
+        parcelas: isRecorrente ? `${parcelaAtual}/${totalFaturas}` : (primeiroRegistro.parcelas || '1x'),
+        dataVenda: dataVendaMaisRecente,
         hasVindiMatch: true,
-        valorPlanilha
+        valorPlanilha: valorTotalPlanilha,
+        // Novos campos para detalhamento
+        isRecorrente,
+        statusRecorrencia,
+        parcelaAtual: isRecorrente ? parcelaAtual : 1,
+        totalParcelas: totalFaturas,
+        registrosConsolidados: registrosParaProcessar.length,
+        detalhesFaturas: {
+          pagas: faturasPagas.length,
+          pendentes: faturasPendentes.length,
+          total: totalFaturas,
+          ultimoPagamento: faturasPagas.length > 0 ? faturasPagas[faturasPagas.length - 1].created_at : null
+        }
       };
       
       customers.push(customer);
       
-      // Verificar inconsistências de valor
-      const diferencaValor = Math.abs(valorTotalVindi - valorPlanilha);
+      // Verificar inconsistências de valor (considerando valores consolidados)
+      const diferencaValor = Math.abs(valorTotalVindi - valorTotalPlanilha);
       if (diferencaValor > 0.01) {
-        console.log(`⚠️  INCONSISTÊNCIA DE VALOR: Vindi R$ ${valorTotalVindi} vs Planilha R$ ${valorPlanilha}`);
+        console.log(`⚠️  INCONSISTÊNCIA DE VALOR: Vindi R$ ${valorTotalVindi} vs Planilha R$ ${valorTotalPlanilha}`);
         
         inconsistencies.push({
           id: inconsistencyId++,
-          cpf: linha['cpf/cnpj'],
-          cliente: linha.nome,
+          cpf: primeiroRegistro['cpf/cnpj'],
+          cliente: primeiroRegistro.nome,
           tipo: 'Valor divergente',
           vindiValor: valorTotalVindi,
-          planilhaValor: valorPlanilha,
-          diferenca: valorTotalVindi - valorPlanilha,
+          planilhaValor: valorTotalPlanilha,
+          diferenca: valorTotalVindi - valorTotalPlanilha,
           status: 'pendente',
           detalhes: {
             valorPagoVindi,
             valorPendenteVindi,
             quantidadeFaturas: customerBills.length,
+            registrosConsolidados: registrosParaProcessar.length,
+            isRecorrente,
+            statusRecorrencia,
             faturas: customerBills.map((b: any) => ({
               id: b.id,
               valor: b.amount,
               status: b.status,
               vencimento: b.due_at
+            })),
+            registrosPlanilha: registrosParaProcessar.map((r: any) => ({
+              valor: r.valorPlanilha,
+              produto: r.produto,
+              forma: r.forma,
+              data: r.data_venda || r.data_transacao
             }))
           }
         });
       }
       
-    } else {
-      console.log(`❌ SEM MATCH: ${linha.nome} (CPF: ${cpfPlanilha}) - apenas na planilha`);
+      // Inconsistência de recorrência mal configurada
+      if (registrosParaProcessar.length > 1 && !isRecorrente) {
+        inconsistencies.push({
+          id: inconsistencyId++,
+          cpf: primeiroRegistro['cpf/cnpj'],
+          cliente: primeiroRegistro.nome,
+          tipo: 'Múltiplos registros na planilha mas pagamento único na Vindi',
+          planilhaValor: valorTotalPlanilha,
+          vindiValor: valorTotalVindi,
+          status: 'analisando',
+          detalhes: {
+            registrosNaPlanilha: registrosParaProcessar.length,
+            faturasNaVindi: customerBills.length,
+            sugestao: 'Verificar se deveria ser recorrente'
+          }
+        });
+      }
       
-      // Cliente só na planilha
+    } else {
+      const primeiroRegistro = registrosParaProcessar[0];
+      console.log(`❌ SEM MATCH: ${primeiroRegistro.nome} (CPF: ${cpfPlanilha}) - apenas na planilha`);
+      
+      // Cliente só na planilha (consolidado)
       const customer = {
-        id: `sheet-${index}`,
-        nome: linha.nome || 'Nome não informado',
-        cpf_cnpj: linha['cpf/cnpj'],
-        email: linha.cliente || '',
-        produto: linha.produto || 'Não especificado',
-        valorTotal: valorPlanilha,
+        id: `sheet-${cpfPlanilha}`,
+        nome: primeiroRegistro.nome || 'Nome não informado',
+        cpf_cnpj: primeiroRegistro['cpf/cnpj'],
+        email: primeiroRegistro.cliente || '',
+        produto: produtosCombinados || 'Não especificado',
+        valorTotal: valorTotalPlanilha,
         valorPago: 0,
-        valorPendente: valorPlanilha,
+        valorPendente: valorTotalPlanilha,
         status: 'Somente Planilha',
-        formaPagamento: linha.forma || 'Não informado',
-        parcelas: linha.parcelas || '1x',
-        dataVenda: linha.data_venda || linha.data_transacao || '',
+        formaPagamento: primeiroRegistro.forma || 'Não informado',
+        parcelas: primeiroRegistro.parcelas || '1x',
+        dataVenda: dataVendaMaisRecente,
         hasVindiMatch: false,
-        valorPlanilha
+        valorPlanilha: valorTotalPlanilha,
+        registrosConsolidados: registrosParaProcessar.length,
+        isRecorrente: false,
+        statusRecorrencia: 'N/A'
       };
       
       customers.push(customer);
@@ -343,24 +450,41 @@ async function fazerCrossmatch() {
       // Inconsistência - cliente não encontrado na Vindi
       inconsistencies.push({
         id: inconsistencyId++,
-        cpf: linha['cpf/cnpj'],
-        cliente: linha.nome,
+        cpf: primeiroRegistro['cpf/cnpj'],
+        cliente: primeiroRegistro.nome,
         tipo: 'Cliente não encontrado na Vindi',
-        planilhaValor: valorPlanilha,
+        planilhaValor: valorTotalPlanilha,
         status: 'pendente',
         detalhes: {
-          dadosPlanilha: linha
+          registrosConsolidados: registrosParaProcessar.length,
+          dadosPlanilha: registrosParaProcessar
         }
       });
+      
+      // Inconsistência adicional se há registros duplicados
+      if (registrosParaProcessar.length > 1) {
+        inconsistencies.push({
+          id: inconsistencyId++,
+          cpf: primeiroRegistro['cpf/cnpj'],
+          cliente: primeiroRegistro.nome,
+          tipo: 'Múltiplos registros na planilha para mesmo CPF',
+          planilhaValor: valorTotalPlanilha,
+          status: 'analisando',
+          detalhes: {
+            totalRegistros: registrosParaProcessar.length,
+            registrosComValor: registrosParaProcessar.filter((r: any) => r.valorPlanilha > 0).length,
+            registrosSemValor: registrosParaProcessar.filter((r: any) => r.valorPlanilha === 0).length,
+            sugestao: 'Verificar se são vendas separadas ou duplicatas'
+          }
+        });
+      }
     }
   });
   
   // Verificar clientes que estão só na Vindi
   vindiCustomers.forEach((vindiCustomer: any) => {
     const cpfVindi = normalizeCPF(vindiCustomer.registry_code || vindiCustomer.code || '');
-    const existeNaPlanilha = dadosPlanilha.some(linha => 
-      normalizeCPF(linha['cpf/cnpj'] || '') === cpfVindi
-    );
+    const existeNaPlanilha = dadosConsolidados.has(cpfVindi);
     
     if (!existeNaPlanilha && cpfVindi) {
       console.log(`❌ Cliente só na Vindi: ${vindiCustomer.name} (CPF: ${cpfVindi})`);

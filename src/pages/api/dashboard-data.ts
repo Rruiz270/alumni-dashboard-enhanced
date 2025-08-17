@@ -23,117 +23,156 @@ interface SpreadsheetRow {
   [key: string]: string | undefined;
 }
 
-// Buscar dados REAIS da planilha Google Sheets
+// Buscar dados REAIS da planilha Google Sheets usando https nativo
 async function buscarDadosReaisPlanilha(): Promise<SpreadsheetRow[]> {
   const SHEET_ID = '1YBBwUQHOlOCNmpSA8hdGLKZYpbq4Pwbo3I3tx8U7dW8';
   
   try {
     console.log('=== BUSCANDO DADOS REAIS DA PLANILHA ===');
     
-    const urls = [
-      `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=0`,
-      `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=0`
-    ];
+    const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=0`;
+    console.log('Buscando URL:', url);
     
-    for (const url of urls) {
-      try {
-        console.log('Tentando URL:', url);
-        const response = await fetch(url, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (compatible; Node.js)'
-          }
+    // Usar https nativo do Node.js
+    const https = require('https');
+    
+    const csvData = await new Promise<string>((resolve, reject) => {
+      const req = https.request(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+      }, (res: any) => {
+        let data = '';
+        
+        res.on('data', (chunk: any) => {
+          data += chunk;
         });
         
-        if (response.ok) {
-          const csvData = await response.text();
-          
-          if (!csvData.includes('<HTML>') && csvData.includes('Sale Key')) {
-            console.log('✅ CSV real obtido com sucesso!');
-            
-            const lines = csvData.split('\n').filter(line => line.trim());
-            console.log('Total linhas na planilha:', lines.length);
-            
-            if (lines.length < 2) return [];
-            
-            // Parse CSV headers - remover aspas e normalizar
-            const headers = lines[0].split(',').map(h => 
-              h.trim()
-                .replace(/"/g, '')
-                .toLowerCase()
-                .replace(/\s+/g, '_')
-                .replace(/\//g, '/')
-            );
-            
-            console.log('Headers encontrados:', headers.slice(0, 10));
-            
-            // Parse data rows
-            const data: SpreadsheetRow[] = [];
-            
-            for (let i = 1; i < lines.length; i++) { // Processar TODAS as linhas
-              const line = lines[i];
-              if (!line.trim()) continue;
-              
-              // Split CSV considerando aspas
-              const values: string[] = [];
-              let current = '';
-              let inQuotes = false;
-              
-              for (let j = 0; j < line.length; j++) {
-                const char = line[j];
-                if (char === '"') {
-                  inQuotes = !inQuotes;
-                } else if (char === ',' && !inQuotes) {
-                  values.push(current.trim());
-                  current = '';
-                } else {
-                  current += char;
-                }
-              }
-              values.push(current.trim());
-              
-              // Criar objeto da linha
-              const row: SpreadsheetRow = {};
-              headers.forEach((header, index) => {
-                if (values[index]) {
-                  row[header] = values[index].replace(/"/g, '');
-                }
-              });
-              
-              // Só adicionar se tem CPF e nome
-              if (row['cpf/cnpj'] && row['nome']) {
-                data.push(row);
-              }
-            }
-            
-            console.log(`✅ Processadas ${data.length} linhas válidas da planilha`);
-            console.log('Primeira linha exemplo:', data[0]);
-            
-            return data;
+        res.on('end', () => {
+          if (res.statusCode === 200) {
+            resolve(data);
+          } else {
+            reject(new Error(`HTTP ${res.statusCode}`));
+          }
+        });
+      });
+      
+      req.on('error', reject);
+      req.setTimeout(30000, () => {
+        req.destroy();
+        reject(new Error('Timeout'));
+      });
+      
+      req.end();
+    });
+    
+    console.log(`📊 Dados recebidos: ${csvData.length} caracteres`);
+    
+    if (!csvData.includes('<HTML>') && csvData.includes('Sale Key')) {
+      console.log('✅ CSV real obtido com sucesso!');
+      
+      const lines = csvData.split('\n').filter(line => line.trim());
+      console.log('Total linhas na planilha:', lines.length);
+      
+      if (lines.length < 2) return [];
+      
+      // Parse headers para referência
+      const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+      console.log('Headers encontrados:', headers.slice(0, 10));
+      console.log(`Coluna E (índice 4): ${headers[4]}`);
+      console.log(`Coluna F (índice 5): ${headers[5]}`);
+      
+      // Parse data rows usando índices fixos (E=4 para CPF, F=5 para Nome)
+      const data: SpreadsheetRow[] = [];
+      
+      for (let i = 1; i < lines.length; i++) { // Processar TODAS as linhas
+        const line = lines[i];
+        if (!line.trim()) continue;
+        
+        // Split CSV considerando aspas
+        const values: string[] = [];
+        let current = '';
+        let inQuotes = false;
+        
+        for (let j = 0; j < line.length; j++) {
+          const char = line[j];
+          if (char === '"') {
+            inQuotes = !inQuotes;
+          } else if (char === ',' && !inQuotes) {
+            values.push(current.trim().replace(/"/g, ''));
+            current = '';
+          } else {
+            current += char;
           }
         }
-      } catch (error) {
-        console.log('Erro na URL:', url, error instanceof Error ? error.message : 'Erro desconhecido');
-        continue;
+        values.push(current.trim().replace(/"/g, ''));
+        
+        // Acessar diretamente pelos índices conhecidos
+        const cpf = values[4] || '';  // Coluna E
+        const nome = values[5] || ''; // Coluna F
+        const cliente = values[6] || ''; // Coluna G
+        const valorTotal = values[21] || ''; // Coluna V
+        const forma = values[12] || ''; // Coluna M
+        const produto = values[13] || ''; // Coluna N
+        const parcelas = values[20] || ''; // Coluna U
+        const dataVenda = values[10] || values[9] || ''; // Coluna K ou J
+        
+        // Só adicionar se tem CPF e nome válidos
+        if (cpf && nome && cpf.length >= 11) {
+          const row: SpreadsheetRow = {
+            'cpf/cnpj': cpf,
+            'nome': nome,
+            'cliente': cliente,
+            'valor_total': valorTotal,
+            'forma': forma,
+            'produto': produto,
+            'parcelas': parcelas,
+            'data_venda': dataVenda
+          };
+          
+          data.push(row);
+        }
       }
+      
+      console.log(`✅ Processadas ${data.length} linhas válidas da planilha`);
+      console.log('Primeiros 3 CPFs da planilha:', data.slice(0, 3).map(d => `${d.nome} - ${d['cpf/cnpj']}`));
+      
+      return data;
+    } else {
+      console.log('❌ Dados inválidos da planilha');
+      return [];
     }
     
-    console.log('❌ Falha ao obter dados da planilha, usando dados exemplo');
-    return [];
-    
   } catch (error) {
-    console.error('Erro geral ao buscar planilha:', error);
+    console.error('Erro ao buscar planilha:', error instanceof Error ? error.message : 'Erro desconhecido');
     return [];
   }
 }
 
 function normalizeCPF(cpf: string): string {
   if (!cpf) return '';
-  // Remove tudo que não é número
-  const normalized = cpf.replace(/[^0-9]/g, '');
+  
+  // Remove tudo que não é número (pontos, traços, espaços, etc.)
+  const normalized = String(cpf).replace(/[^0-9]/g, '');
+  
+  // Debug para testar casos específicos
+  if (cpf.includes('304.268.648-59') || normalized === '30426864859') {
+    console.log(`🔍 DEBUG CPF ESPECÍFICO:`);
+    console.log(`   Original: "${cpf}"`);
+    console.log(`   Normalizado: "${normalized}"`);
+    console.log(`   Comprimento: ${normalized.length}`);
+  }
+  
   // CPF deve ter exatamente 11 dígitos, CNPJ 14
   if (normalized.length === 11 || normalized.length === 14) {
     return normalized;
   }
+  
+  // Debug CPFs rejeitados
+  if (normalized.length > 0) {
+    console.log(`⚠️ CPF rejeitado: "${cpf}" -> "${normalized}" (${normalized.length} dígitos)`);
+  }
+  
   return ''; // Retorna vazio se não for um CPF/CNPJ válido
 }
 
@@ -183,29 +222,57 @@ async function buscarVindiCustomers() {
     let page = 1;
     let hasMorePages = true;
     
-    // Buscar TODAS as páginas de clientes
+    // Buscar TODAS as páginas de clientes usando https nativo
     while (hasMorePages) {
-      const customersResponse = await fetch(`https://app.vindi.com.br/api/v1/customers?page=${page}&per_page=100`, { headers });
-      
-      if (!customersResponse.ok) {
-        console.log(`❌ Erro Vindi Customers API página ${page}:`, customersResponse.status);
-        break;
-      }
-      
-      const customersData = await customersResponse.json();
-      const customers = customersData.customers || [];
-      
-      if (customers.length === 0) {
-        hasMorePages = false;
-      } else {
-        allCustomers = allCustomers.concat(customers);
-        console.log(`📄 Página ${page}: ${customers.length} clientes (Total: ${allCustomers.length})`);
-        page++;
+      try {
+        const https = require('https');
         
-        // Verificar se há mais páginas
-        if (customers.length < 100) {
+        const customersData = await new Promise<any>((resolve, reject) => {
+          const req = https.request(`https://app.vindi.com.br/api/v1/customers?page=${page}&per_page=100`, {
+            headers
+          }, (res: any) => {
+            let data = '';
+            res.on('data', (chunk: any) => { data += chunk; });
+            res.on('end', () => {
+              if (res.statusCode === 200) {
+                try {
+                  resolve(JSON.parse(data));
+                } catch (e) {
+                  reject(e);
+                }
+              } else {
+                reject(new Error(`HTTP ${res.statusCode}`));
+              }
+            });
+          });
+          
+          req.on('error', reject);
+          req.setTimeout(30000, () => {
+            req.destroy();
+            reject(new Error('Timeout'));
+          });
+          
+          req.end();
+        });
+        
+        const customers = customersData.customers || [];
+        
+        if (customers.length === 0) {
           hasMorePages = false;
+        } else {
+          allCustomers = allCustomers.concat(customers);
+          console.log(`📄 Página ${page}: ${customers.length} clientes (Total: ${allCustomers.length})`);
+          page++;
+          
+          // Verificar se há mais páginas
+          if (customers.length < 100) {
+            hasMorePages = false;
+          }
         }
+        
+      } catch (error) {
+        console.log(`❌ Erro Vindi Customers API página ${page}:`, error instanceof Error ? error.message : 'Erro desconhecido');
+        break;
       }
     }
     
@@ -237,29 +304,57 @@ async function buscarVindiBills() {
     let page = 1;
     let hasMorePages = true;
     
-    // Buscar TODAS as páginas de faturas
+    // Buscar TODAS as páginas de faturas usando https nativo
     while (hasMorePages) {
-      const billsResponse = await fetch(`https://app.vindi.com.br/api/v1/bills?page=${page}&per_page=100`, { headers });
-      
-      if (!billsResponse.ok) {
-        console.log(`❌ Erro Vindi Bills API página ${page}:`, billsResponse.status);
-        break;
-      }
-      
-      const billsData = await billsResponse.json();
-      const bills = billsData.bills || [];
-      
-      if (bills.length === 0) {
-        hasMorePages = false;
-      } else {
-        allBills = allBills.concat(bills);
-        console.log(`📄 Página ${page}: ${bills.length} faturas (Total: ${allBills.length})`);
-        page++;
+      try {
+        const https = require('https');
         
-        // Verificar se há mais páginas
-        if (bills.length < 100) {
+        const billsData = await new Promise<any>((resolve, reject) => {
+          const req = https.request(`https://app.vindi.com.br/api/v1/bills?page=${page}&per_page=100`, {
+            headers
+          }, (res: any) => {
+            let data = '';
+            res.on('data', (chunk: any) => { data += chunk; });
+            res.on('end', () => {
+              if (res.statusCode === 200) {
+                try {
+                  resolve(JSON.parse(data));
+                } catch (e) {
+                  reject(e);
+                }
+              } else {
+                reject(new Error(`HTTP ${res.statusCode}`));
+              }
+            });
+          });
+          
+          req.on('error', reject);
+          req.setTimeout(30000, () => {
+            req.destroy();
+            reject(new Error('Timeout'));
+          });
+          
+          req.end();
+        });
+        
+        const bills = billsData.bills || [];
+        
+        if (bills.length === 0) {
           hasMorePages = false;
+        } else {
+          allBills = allBills.concat(bills);
+          console.log(`📄 Página ${page}: ${bills.length} faturas (Total: ${allBills.length})`);
+          page++;
+          
+          // Verificar se há mais páginas
+          if (bills.length < 100) {
+            hasMorePages = false;
+          }
         }
+        
+      } catch (error) {
+        console.log(`❌ Erro Vindi Bills API página ${page}:`, error instanceof Error ? error.message : 'Erro desconhecido');
+        break;
       }
     }
     
@@ -302,12 +397,23 @@ async function fazerCrossmatch() {
     const cpf = normalizeCPF(customer.registry_code || customer.code || '');
     const nome = normalizeNome(customer.name || '');
     
-    // Debug dos primeiros 5 clientes
-    if (vindiMapCPF.size < 5) {
-      console.log(`Cliente Vindi: ${customer.name}`);
-      console.log(`  CPF original: ${customer.registry_code || customer.code}`);
-      console.log(`  CPF normalizado: ${cpf}`);
-      console.log(`  Nome normalizado: ${nome}`);
+    // Debug dos primeiros 10 clientes para entender formato
+    if (vindiMapCPF.size < 10) {
+      console.log(`Cliente Vindi ${vindiMapCPF.size + 1}: ${customer.name}`);
+      console.log(`  registry_code: "${customer.registry_code}"`);
+      console.log(`  code: "${customer.code}"`);
+      console.log(`  CPF usado: "${customer.registry_code || customer.code}"`);
+      console.log(`  CPF normalizado: "${cpf}" (${cpf.length} dígitos)`);
+      console.log(`  Nome normalizado: "${nome}"`);
+      console.log('---');
+    }
+    
+    // Debug específico para casos problemáticos mencionados
+    if (customer.name && (customer.name.toLowerCase().includes('joao edison') || customer.name.toLowerCase().includes('fonseca'))) {
+      console.log(`🎯 ENCONTROU JOAO EDISON:`);
+      console.log(`  Nome: ${customer.name}`);
+      console.log(`  CPF original: "${customer.registry_code || customer.code}"`);
+      console.log(`  CPF normalizado: "${cpf}"`);
     }
     
     if (cpf) {
@@ -693,34 +799,44 @@ async function fazerCrossmatch() {
       
       customers.push(customer);
       
-      // Só considerar inconsistência se valor for significativo (> R$ 50,00)
-      if (valorTotalPlanilha > 50.00) {
-        console.log(`❌ Cliente com valor significativo não encontrado na Vindi: ${primeiroRegistro.nome} (R$ ${valorTotalPlanilha})`);
+      // Só reportar como inconsistência casos MUITO específicos para clientes não na Vindi:
+      // 1. Valores muito altos (>R$ 1000) - podem ser vendas importantes perdidas
+      // 2. Clientes com múltiplos registros - podem indicar problema de cadastro
+      const isValorMuitoAlto = valorTotalPlanilha > 1000.00;
+      const isMultiplosRegistros = registrosParaProcessar.length > 1;
+      
+      if (isValorMuitoAlto) {
+        console.log(`⚠️  Cliente com valor MUITO ALTO não encontrado na Vindi: ${primeiroRegistro.nome} (R$ ${valorTotalPlanilha})`);
         
-        // Inconsistência - cliente não encontrado na Vindi
+        // Inconsistência - cliente com valor alto não encontrado na Vindi
         inconsistencies.push({
           id: inconsistencyId++,
           cpf: primeiroRegistro['cpf/cnpj'],
           cliente: primeiroRegistro.nome,
-          tipo: 'Cliente não encontrado na Vindi',
+          tipo: 'Cliente com valor alto não encontrado na Vindi',
           planilhaValor: valorTotalPlanilha,
-          status: 'pendente',
+          status: 'aguardando',
           detalhes: {
             registrosConsolidados: registrosParaProcessar.length,
-            dadosPlanilha: registrosParaProcessar
+            dadosPlanilha: registrosParaProcessar,
+            motivo: 'Valor alto pode indicar venda importante não cadastrada na Vindi'
           }
         });
       } else {
-        console.log(`ℹ️  Cliente com valor baixo ignorado: ${primeiroRegistro.nome} (R$ ${valorTotalPlanilha})`);
+        console.log(`ℹ️  Cliente normal só na planilha (não é inconsistência): ${primeiroRegistro.nome} (R$ ${valorTotalPlanilha})`);
       }
       
-      // Inconsistência adicional se há registros duplicados
-      if (registrosParaProcessar.length > 1) {
+      // Só reportar múltiplos registros como inconsistência se for problemático:
+      // 1. Muitos registros (>3) - pode indicar dados duplicados
+      // 2. Mix de registros com/sem valor - pode indicar inconsistência nos dados
+      if (registrosParaProcessar.length > 3) {
+        console.log(`⚠️  Muitos registros para mesmo CPF: ${primeiroRegistro.nome} (${registrosParaProcessar.length} registros)`);
+        
         inconsistencies.push({
           id: inconsistencyId++,
           cpf: primeiroRegistro['cpf/cnpj'],
           cliente: primeiroRegistro.nome,
-          tipo: 'Múltiplos registros na planilha para mesmo CPF',
+          tipo: 'Muitos registros duplicados na planilha',
           planilhaValor: valorTotalPlanilha,
           status: 'analisando',
           detalhes: {
@@ -730,6 +846,8 @@ async function fazerCrossmatch() {
             sugestao: 'Verificar se são vendas separadas ou duplicatas'
           }
         });
+      } else if (registrosParaProcessar.length > 1) {
+        console.log(`ℹ️  Cliente com ${registrosParaProcessar.length} registros na planilha (normal): ${primeiroRegistro.nome}`);
       }
     }
   });
@@ -778,9 +896,19 @@ async function fazerCrossmatch() {
   const totalPaidAmount = customers.reduce((sum, c) => sum + c.valorPago, 0);
   const pendingPayments = customers.reduce((sum, c) => sum + c.valorPendente, 0);
   
+  // Estatísticas detalhadas
+  const clientesComMatch = customers.filter(c => c.hasVindiMatch);
+  const clientesSemMatch = customers.filter(c => !c.hasVindiMatch);
+  const matchesPorCPF = customers.filter(c => c.matchMethod === 'CPF');
+  const matchesPorNome = customers.filter(c => c.matchMethod === 'NOME' || c.matchMethod?.includes('SIMILAR'));
+  
   console.log(`\n🎯 RESULTADO DO CROSSMATCH REAL:`);
-  console.log(`   - Total clientes: ${customers.length}`);
-  console.log(`   - Total inconsistências: ${inconsistencies.length}`);
+  console.log(`   - Total clientes processados: ${customers.length}`);
+  console.log(`   - Clientes com match na Vindi: ${clientesComMatch.length}`);
+  console.log(`     └── Match por CPF: ${matchesPorCPF.length}`);
+  console.log(`     └── Match por nome/similar: ${matchesPorNome.length}`);
+  console.log(`   - Clientes só na planilha: ${clientesSemMatch.length}`);
+  console.log(`   - Inconsistências REAIS encontradas: ${inconsistencies.length}`);
   console.log(`   - Receita total: R$ ${totalRevenue.toFixed(2)}`);
   console.log(`   - Valor pago: R$ ${totalPaidAmount.toFixed(2)}`);
   console.log(`   - Valor pendente: R$ ${pendingPayments.toFixed(2)}`);

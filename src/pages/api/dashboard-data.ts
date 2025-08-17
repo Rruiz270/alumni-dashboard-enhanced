@@ -156,7 +156,7 @@ async function buscarVindiCustomers() {
       'Content-Type': 'application/json',
     };
 
-    let allCustomers = [];
+    let allCustomers: any[] = [];
     let page = 1;
     let hasMorePages = true;
     
@@ -210,7 +210,7 @@ async function buscarVindiBills() {
       'Content-Type': 'application/json',
     };
 
-    let allBills = [];
+    let allBills: any[] = [];
     let page = 1;
     let hasMorePages = true;
     

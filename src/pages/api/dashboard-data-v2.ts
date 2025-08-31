@@ -201,25 +201,46 @@ async function fetchGoogleSheetsData(): Promise<SpreadsheetRow[]> {
       
       if (lines.length < 2) return [];
       
-      // Parse headers
+      // Parse headers and map to known positions
       const headers = parseCSVLine(lines[0]);
       console.log(`📊 Found ${headers.length} columns and ${lines.length - 1} data rows`);
+      console.log('First 10 headers:', headers.slice(0, 10));
       
-      // Parse data rows
+      // Find column indices for key fields
+      const columnMap: Record<string, number> = {};
+      headers.forEach((header, index) => {
+        const normalizedHeader = header.toLowerCase().trim();
+        columnMap[normalizedHeader] = index;
+      });
+      
+      // Parse data rows using fixed positions (fallback to column mapping)
       const data: SpreadsheetRow[] = [];
       
       for (let i = 1; i < lines.length; i++) {
         const values = parseCSVLine(lines[i]);
-        const row: SpreadsheetRow = {};
+        if (values.length < 5) continue; // Skip incomplete rows
         
+        // Use fixed indices for key columns (safer approach)
+        const cpfIndex = columnMap['cpf/cnpj'] || 4; // Column E
+        const nomeIndex = columnMap['nome'] || 5; // Column F
+        const clienteIndex = columnMap['cliente'] || 6; // Column G
+        
+        const row: SpreadsheetRow = {
+          'cpf/cnpj': values[cpfIndex] || '',
+          'nome': values[nomeIndex] || '',
+          'cliente': values[clienteIndex] || ''
+        };
+        
+        // Map all other available columns
         headers.forEach((header, index) => {
-          if (values[index] !== undefined) {
+          if (values[index] !== undefined && values[index] !== '') {
             row[header] = values[index];
           }
         });
         
         // Only add rows with valid CPF/CNPJ
-        if (row['cpf/cnpj'] && row['cpf/cnpj'].length >= 11) {
+        const cpf = row['cpf/cnpj'] || '';
+        if (cpf && cpf.replace(/[^0-9]/g, '').length >= 11) {
           data.push(row);
         }
       }
@@ -543,9 +564,9 @@ async function processDataAndGenerateMetrics() {
       id: `${cpf}-${Date.now()}`,
       
       // Basic info
-      nome: row.nome || '',
+      nome: row.nome || vindiCustomer?.name || 'Nome não informado',
       cpf_cnpj: row['cpf/cnpj'] || '',
-      email: row.cliente || '',
+      email: row.cliente || vindiCustomer?.email || '',
       telefone: row.celular || '',
       endereco: row.endereco || '',
       vendedor: row.vendedor || 'Não informado',

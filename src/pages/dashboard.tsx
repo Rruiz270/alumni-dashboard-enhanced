@@ -798,12 +798,20 @@ const SalesDashboard = () => {
   if (error) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Alert className="max-w-md">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            Erro ao carregar dados: {error}
-          </AlertDescription>
-        </Alert>
+        <div className="max-w-md">
+          <Alert className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Erro ao carregar dados: {error}
+            </AlertDescription>
+          </Alert>
+          <button
+            onClick={refreshData}
+            className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          >
+            Tentar novamente
+          </button>
+        </div>
       </div>
     );
   }

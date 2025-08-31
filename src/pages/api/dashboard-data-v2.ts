@@ -2,28 +2,26 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 
 // Complete interface matching all Google Sheets fields
 interface SpreadsheetRow {
-  // Fiscal/Administrative
+  // Exact Google Sheets headers
   'coo'?: string;
   'nf_produto'?: string;
   'nf_servico'?: string;
-  'documento'?: string;
+  'Documento'?: string;
   'cpf/cnpj'?: string;
-  
-  // Customer data
-  'nome'?: string;
-  'cliente'?: string;
-  'celular'?: string;
-  'endereco'?: string;
-  
-  // Dates and transactions
+  'Nome'?: string;
+  'Cliente'?: string;
+  'Celular'?: string;
+  'Endereco'?: string;
   'data_transacao'?: string;
   'data_venda'?: string;
-  'ultima_parcela'?: string;
-  'cancelamento'?: string;
-  'sim_data_cancelamento'?: string;
-  
-  // Payment
+  'ultima parcela'?: string;
   'forma'?: string;
+  'produto'?: string;
+  'fonte'?: string;
+  'renovacao'?: string;
+  'nivel'?: string;
+  'desconto'?: string;
+  'duracao_curso'?: string;
   'bandeira'?: string;
   'parcelas'?: string;
   'valor_total'?: string;
@@ -31,32 +29,18 @@ interface SpreadsheetRow {
   'valor_servico'?: string;
   'liquido_cielo'?: string;
   'taxa_aplicada'?: string;
+  'cancelamento'?: string;
   'adquirente'?: string;
   'valor_liquido'?: string;
   'taxa'?: string;
-  'cobranca'?: string;
-  
-  // Course
-  'produto'?: string;
-  'fonte'?: string;
-  'renovacao'?: string;
-  'nivel'?: string;
-  'desconto'?: string;
-  'duracao_curso'?: string;
-  
-  // Cancellation
+  'cobrança'?: string;
+  'data_cancelamento'?: string;
   'tipo_cancelamento'?: string;
   'razao_cancelamento'?: string;
   'multa'?: string;
   'pago_ate_cancelamento'?: string;
   'perda'?: string;
-  
-  // Internal control
   'Acesso Enviado'?: string;
-  'Softr Record ID'?: string;
-  
-  // Seller info (vendedor column - discovered from requirements)
-  'vendedor'?: string;
   
   [key: string]: string | undefined;
 }
@@ -220,21 +204,14 @@ async function fetchGoogleSheetsData(): Promise<SpreadsheetRow[]> {
         const values = parseCSVLine(lines[i]);
         if (values.length < 5) continue; // Skip incomplete rows
         
-        // Use fixed indices for key columns (safer approach)
-        const cpfIndex = columnMap['cpf/cnpj'] || 4; // Column E
-        const nomeIndex = columnMap['nome'] || 5; // Column F
-        const clienteIndex = columnMap['cliente'] || 6; // Column G
+        // Create row object with exact header mapping
+        const row: SpreadsheetRow = {};
         
-        const row: SpreadsheetRow = {
-          'cpf/cnpj': values[cpfIndex] || '',
-          'nome': values[nomeIndex] || '',
-          'cliente': values[clienteIndex] || ''
-        };
-        
-        // Map all other available columns
         headers.forEach((header, index) => {
-          if (values[index] !== undefined && values[index] !== '') {
-            row[header] = values[index];
+          if (values[index] !== undefined) {
+            // Clean header name and map to our interface
+            const cleanHeader = header.trim();
+            row[cleanHeader] = values[index].trim();
           }
         });
         
@@ -543,20 +520,20 @@ async function processDataAndGenerateMetrics() {
       });
     }
     
-    // Parse values
-    const valorTotal = parseFloat((row.valor_total || '0').replace(/[R$.,\s]/g, '').replace(',', '.')) / 100;
-    const valorProduto = parseFloat((row.valor_produto || '0').replace(/[R$.,\s]/g, '').replace(',', '.')) / 100;
-    const valorServico = parseFloat((row.valor_servico || '0').replace(/[R$.,\s]/g, '').replace(',', '.')) / 100;
-    const valorLiquido = parseFloat((row.valor_liquido || '0').replace(/[R$.,\s]/g, '').replace(',', '.')) / 100;
-    const taxa = parseFloat((row.taxa || '0').replace('%', '')) / 100;
-    const desconto = parseFloat((row.desconto || '0').replace('%', '')) / 100;
-    const duracaoCurso = parseInt(row.duracao_curso || '6');
-    const parcelas = parseInt(row.parcelas || '1');
+    // Parse values with correct field names
+    const valorTotal = parseFloat((row['valor_total'] || '0').replace(/[R$.,\s]/g, '').replace(',', '.')) / 100;
+    const valorProduto = parseFloat((row['valor_produto'] || '0').replace(/[R$.,\s]/g, '').replace(',', '.')) / 100;
+    const valorServico = parseFloat((row['valor_servico'] || '0').replace(/[R$.,\s]/g, '').replace(',', '.')) / 100;
+    const valorLiquido = parseFloat((row['valor_liquido'] || '0').replace(/[R$.,\s]/g, '').replace(',', '.')) / 100;
+    const taxa = parseFloat((row['taxa'] || '0').replace('%', '')) / 100;
+    const desconto = parseFloat((row['desconto'] || '0').replace('%', '')) / 100;
+    const duracaoCurso = parseInt(row['duracao_curso'] || '6');
+    const parcelas = parseInt(row['parcelas'] || '1');
     
     // Calculate days until access
     let diasAteAcesso = 0;
-    if (row.data_venda && row['Acesso Enviado'] !== 'Sim') {
-      diasAteAcesso = Math.floor((Date.now() - new Date(row.data_venda).getTime()) / (1000 * 60 * 60 * 24));
+    if (row['data_venda'] && row['Acesso Enviado'] !== 'Sim') {
+      diasAteAcesso = Math.floor((Date.now() - new Date(row['data_venda']).getTime()) / (1000 * 60 * 60 * 24));
     }
     
     // Create customer metrics object
@@ -564,19 +541,19 @@ async function processDataAndGenerateMetrics() {
       id: `${cpf}-${Date.now()}`,
       
       // Basic info
-      nome: row.nome || vindiCustomer?.name || 'Nome não informado',
+      nome: row['Nome'] || vindiCustomer?.name || 'Nome não informado',
       cpf_cnpj: row['cpf/cnpj'] || '',
-      email: row.cliente || vindiCustomer?.email || '',
-      telefone: row.celular || '',
-      endereco: row.endereco || '',
-      vendedor: row.vendedor || 'Não informado',
+      email: row['Cliente'] || vindiCustomer?.email || '',
+      telefone: row['Celular'] || '',
+      endereco: row['Endereco'] || '',
+      vendedor: row['fonte'] || 'Não informado', // Use 'fonte' as seller since that's where seller names are
       
       // Product info
-      produto: row.produto || '',
-      nivel: row.nivel || '',
+      produto: row['produto'] || '',
+      nivel: row['nivel'] || '',
       duracao_curso: duracaoCurso,
-      renovacao: row.renovacao?.toLowerCase() === 'sim',
-      fonte: row.fonte || '',
+      renovacao: row['renovacao']?.toLowerCase() === 'sim',
+      fonte: row['fonte'] || '',
       
       // Financial data
       valor_total: valorTotal,
@@ -587,26 +564,26 @@ async function processDataAndGenerateMetrics() {
       desconto: desconto,
       
       // Payment info
-      forma_pagamento: row.forma || '',
-      bandeira: row.bandeira || '',
-      adquirente: row.adquirente || '',
+      forma_pagamento: row['forma'] || '',
+      bandeira: row['bandeira'] || '',
+      adquirente: row['adquirente'] || '',
       parcelas: parcelas,
-      ultima_parcela: row.ultima_parcela || '',
+      ultima_parcela: row['ultima parcela'] || '',
       
       // Status
       status: vindiPendingAmount > 0 ? 'Inadimplente' : 'Em dia',
       acesso_enviado: row['Acesso Enviado'] === 'Sim',
-      data_venda: row.data_venda || '',
-      data_transacao: row.data_transacao || '',
+      data_venda: row['data_venda'] || '',
+      data_transacao: row['data_transacao'] || '',
       
       // Cancellation data
-      cancelado: row.cancelamento?.toLowerCase() === 'sim',
-      data_cancelamento: row.sim_data_cancelamento,
-      tipo_cancelamento: row.tipo_cancelamento,
-      razao_cancelamento: row.razao_cancelamento,
-      multa: parseFloat(row.multa || '0'),
-      pago_ate_cancelamento: parseFloat(row.pago_ate_cancelamento || '0'),
-      perda: parseFloat(row.perda || '0'),
+      cancelado: row['cancelamento']?.toLowerCase() === 'sim',
+      data_cancelamento: row['data_cancelamento'],
+      tipo_cancelamento: row['tipo_cancelamento'],
+      razao_cancelamento: row['razao_cancelamento'],
+      multa: parseFloat(row['multa'] || '0'),
+      pago_ate_cancelamento: parseFloat(row['pago_ate_cancelamento'] || '0'),
+      perda: parseFloat(row['perda'] || '0'),
       
       // Vindi match data
       hasVindiMatch: !!vindiCustomer,

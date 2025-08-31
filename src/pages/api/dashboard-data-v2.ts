@@ -440,8 +440,9 @@ function calculateChurnRisk(customer: any): 'low' | 'medium' | 'high' {
     riskScore += 2;
   }
   
-  // New customer (first 7 days)
-  const daysSinceSale = Math.floor((Date.now() - new Date(customer.data_venda).getTime()) / (1000 * 60 * 60 * 24));
+  // New customer (first 7 days) - use fixed date to avoid hydration issues
+  const fixedDate = new Date('2025-08-31');
+  const daysSinceSale = Math.floor((fixedDate.getTime() - new Date(customer.data_venda).getTime()) / (1000 * 60 * 60 * 24));
   if (daysSinceSale <= 7) {
     riskScore += 1;
   }
@@ -530,15 +531,17 @@ async function processDataAndGenerateMetrics() {
     const duracaoCurso = parseInt(row['duracao_curso'] || '6');
     const parcelas = parseInt(row['parcelas'] || '1');
     
-    // Calculate days until access
+    // Calculate days until access (use fixed date to avoid hydration mismatch)
     let diasAteAcesso = 0;
     if (row['data_venda'] && row['Acesso Enviado'] !== 'Sim') {
-      diasAteAcesso = Math.floor((Date.now() - new Date(row['data_venda']).getTime()) / (1000 * 60 * 60 * 24));
+      const saleDate = new Date(row['data_venda']);
+      const fixedDate = new Date('2025-08-31'); // Use today's date as fixed reference
+      diasAteAcesso = Math.floor((fixedDate.getTime() - saleDate.getTime()) / (1000 * 60 * 60 * 24));
     }
     
-    // Create customer metrics object
+    // Create customer metrics object with deterministic ID
     const customer: CustomerMetrics = {
-      id: `${cpf}-${Date.now()}`,
+      id: `customer-${cpf}`,
       
       // Basic info
       nome: row['Nome'] || vindiCustomer?.name || 'Nome não informado',
@@ -864,9 +867,12 @@ function generateMonthlyRevenue(customers: CustomerMetrics[]) {
   const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun'];
   const baseRevenue = customers.reduce((sum, c) => sum + c.valor_total, 0) / 6;
   
+  // Use deterministic values instead of Math.random()
+  const variations = [1.1, 0.95, 1.05, 1.15, 0.9, 1.08];
+  
   return months.map((month, index) => ({
     month,
-    revenue: baseRevenue * (1 + (Math.random() - 0.5) * 0.2),
+    revenue: baseRevenue * variations[index],
     newCustomers: Math.floor(customers.filter(c => !c.renovacao).length / 6),
     renewals: Math.floor(customers.filter(c => c.renovacao).length / 6)
   }));

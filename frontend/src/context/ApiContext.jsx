@@ -3,7 +3,11 @@ import axios from 'axios';
 
 const ApiContext = createContext();
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || (
+  typeof window !== 'undefined' && window.location.origin.includes('vercel.app') 
+    ? '/api' 
+    : 'http://localhost:3001/api'
+);
 
 export const useApi = () => {
   const context = useContext(ApiContext);

@@ -25,6 +25,7 @@
   "author": "Alumni by Better",
   "license": "MIT",
   "devDependencies": {
+    "@vercel/node": "^5.3.17",
     "concurrently": "^9.2.1"
   }
 }

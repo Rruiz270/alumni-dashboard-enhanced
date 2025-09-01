@@ -9,15 +9,27 @@ class GoogleSheetsService {
 
   initialize() {
     try {
-      this.auth = new google.auth.GoogleAuth({
-        credentials: {
-          client_email: process.env.GOOGLE_CLIENT_EMAIL,
-          private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-        },
-        scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
-      });
+      // Check if we have API key or service account credentials
+      if (process.env.GOOGLE_SHEETS_API_KEY) {
+        // Use API key for public sheets
+        this.sheets = google.sheets({ 
+          version: 'v4', 
+          auth: process.env.GOOGLE_SHEETS_API_KEY 
+        });
+      } else if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
+        // Use service account for private sheets
+        this.auth = new google.auth.GoogleAuth({
+          credentials: {
+            client_email: process.env.GOOGLE_CLIENT_EMAIL,
+            private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+          },
+          scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+        });
 
-      this.sheets = google.sheets({ version: 'v4', auth: this.auth });
+        this.sheets = google.sheets({ version: 'v4', auth: this.auth });
+      } else {
+        throw new Error('No Google Sheets authentication configured. Set either GOOGLE_SHEETS_API_KEY or service account credentials.');
+      }
     } catch (error) {
       console.error('Error initializing Google Sheets:', error);
     }

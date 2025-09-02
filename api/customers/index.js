@@ -68,8 +68,15 @@ export default async function handler(req, res) {
                 const amountValue = customer['valor_total'] || customer['Valor Total'] || customer['Valor'] || 
                                    customer['Amount'] || customer['Total'] || customer['valor'] || customer['amount'] || '0';
 
-                // Parse amount
-                const expectedAmount = parseFloat(amountValue.toString().replace(/[R$\s]/g, '').replace(',', '.')) || 0;
+                // Parse amount - handle Brazilian currency format
+                let expectedAmount = 0;
+                if (amountValue) {
+                  const cleanAmount = amountValue.toString()
+                    .replace(/[R$\s]/g, '')  // Remove R$ and spaces
+                    .replace(/\./g, '')       // Remove thousands separators
+                    .replace(',', '.');       // Convert decimal comma to dot
+                  expectedAmount = parseFloat(cleanAmount) || 0;
+                }
                 
                 // Normalize CPF/CNPJ
                 const normalizedCpfCnpj = cpfCnpjValue.replace(/\D/g, '');

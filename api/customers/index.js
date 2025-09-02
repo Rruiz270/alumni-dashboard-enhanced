@@ -150,9 +150,9 @@ export default async function handler(req, res) {
                       }
                     }
                     
-                    const discrepancy = customer.expectedAmount - collectedAmount;
+                    const discrepancy = parseFloat((customer.expectedAmount - collectedAmount).toFixed(2));
                     const servicePaymentPercentage = customer.expectedAmount > 0 ? 
-                      (collectedAmount / customer.expectedAmount) * 100 : 0;
+                      parseFloat(((collectedAmount / customer.expectedAmount) * 100).toFixed(2)) : 0;
                     
                     const flags = [];
                     if (Math.abs(discrepancy) > 10) flags.push('DISCREPANCY');

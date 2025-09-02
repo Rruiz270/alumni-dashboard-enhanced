@@ -137,7 +137,10 @@ export default async function handler(req, res) {
                           if (billsResponse.ok) {
                             const billsData = await billsResponse.json();
                             const paidBills = billsData.bills?.filter(bill => bill.status === 'paid') || [];
-                            collectedAmount = paidBills.reduce((sum, bill) => sum + (bill.amount || 0), 0) / 100; // Convert cents to reais
+                            collectedAmount = paidBills.reduce((sum, bill) => {
+                              const amount = parseFloat(bill.amount) || 0;
+                              return sum + amount;
+                            }, 0) / 100; // Convert cents to reais
                             
                             paymentStatus = collectedAmount >= customer.expectedAmount * 0.98 ? 'FULLY_PAID' :
                                           collectedAmount > 0 ? 'PARTIALLY_PAID' : 'NO_PAYMENT';

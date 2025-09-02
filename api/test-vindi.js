@@ -52,7 +52,10 @@ export default async function handler(req, res) {
       
       const billsData = await billsResponse.json();
       const paidBills = billsData.bills?.filter(bill => bill.status === 'paid') || [];
-      const totalPaid = paidBills.reduce((sum, bill) => sum + (bill.amount || 0), 0) / 100;
+      const totalPaid = paidBills.reduce((sum, bill) => {
+        const amount = parseFloat(bill.amount) || 0;
+        return sum + amount;
+      }, 0) / 100;
       
       billsInfo = {
         totalBills: billsData.bills?.length || 0,

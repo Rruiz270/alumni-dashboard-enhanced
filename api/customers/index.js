@@ -55,18 +55,18 @@ export default async function handler(req, res) {
                   }
                 });
                 
-                // Try multiple possible field names for CPF/CNPJ
-                const cpfCnpjValue = customer['CPF/CNPJ'] || customer['CPF'] || customer['CNPJ'] || 
-                                   customer['Documento'] || customer['documento'] || customer['Doc'] ||
-                                   customer['Registry Code'] || customer['registry_code'] || '';
+                // Try multiple possible field names for CPF/CNPJ - based on actual sheet structure
+                const cpfCnpjValue = customer['cpf/cnpj'] || customer['Documento'] || customer['CPF/CNPJ'] || 
+                                   customer['CPF'] || customer['CNPJ'] || customer['documento'] || 
+                                   customer['Doc'] || customer['Registry Code'] || customer['registry_code'] || '';
                 
-                // Try multiple possible field names for name
-                const nameValue = customer['Nome'] || customer['Name'] || customer['Cliente'] || 
+                // Try multiple possible field names for name - based on actual sheet structure  
+                const nameValue = customer['Nome'] || customer['Cliente'] || customer['Name'] || 
                                  customer['Customer'] || customer['nome'] || customer['name'] || '';
                 
-                // Try multiple possible field names for amount
-                const amountValue = customer['Valor'] || customer['Amount'] || customer['Total'] || 
-                                   customer['Valor Total'] || customer['valor'] || customer['amount'] || '0';
+                // Try multiple possible field names for amount - based on actual sheet structure
+                const amountValue = customer['valor_total'] || customer['Valor Total'] || customer['Valor'] || 
+                                   customer['Amount'] || customer['Total'] || customer['valor'] || customer['amount'] || '0';
 
                 // Parse amount
                 const expectedAmount = parseFloat(amountValue.toString().replace(/[R$\s]/g, '').replace(',', '.')) || 0;

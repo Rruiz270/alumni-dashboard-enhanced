@@ -8,7 +8,9 @@ import {
   TrendingUp,
   Building,
   User,
-  CreditCard
+  CreditCard,
+  RefreshCw,
+  Database
 } from 'lucide-react';
 
 const Dashboard = () => {
@@ -16,36 +18,68 @@ const Dashboard = () => {
   const [metrics, setMetrics] = useState(null);
   const [summary, setSummary] = useState(null);
   const [discrepancies, setDiscrepancies] = useState([]);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState('');
+
+  const fetchData = async () => {
+    try {
+      // Fetch metrics first as it's the most important
+      const metricsData = await getDashboardMetrics();
+      setMetrics(metricsData.data);
+      
+      // Then try to fetch summary and discrepancies
+      try {
+        const summaryData = await getDashboardSummary();
+        setSummary(summaryData.data);
+      } catch (err) {
+        console.error('Error fetching summary:', err);
+        setSummary(null);
+      }
+      
+      try {
+        const discrepanciesData = await getTopDiscrepancies(5);
+        setDiscrepancies(discrepanciesData.data);
+      } catch (err) {
+        console.error('Error fetching discrepancies:', err);
+        setDiscrepancies([]);
+      }
+    } catch (err) {
+      console.error('Error fetching dashboard data:', err);
+      // Don't crash - just show the error state
+    }
+  };
+
+  const syncVindiData = async () => {
+    setSyncing(true);
+    setSyncMessage('Syncing VINDI data...');
+    
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/sync/vindi`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setSyncMessage(`Successfully synced ${data.stats.success} customers with VINDI`);
+        // Refresh dashboard data after sync
+        await fetchData();
+      } else {
+        setSyncMessage('Error syncing VINDI data: ' + data.error);
+      }
+    } catch (err) {
+      setSyncMessage('Failed to sync VINDI data: ' + err.message);
+    } finally {
+      setSyncing(false);
+      // Clear message after 5 seconds
+      setTimeout(() => setSyncMessage(''), 5000);
+    }
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // Fetch metrics first as it's the most important
-        const metricsData = await getDashboardMetrics();
-        setMetrics(metricsData.data);
-        
-        // Then try to fetch summary and discrepancies
-        try {
-          const summaryData = await getDashboardSummary();
-          setSummary(summaryData.data);
-        } catch (err) {
-          console.error('Error fetching summary:', err);
-          setSummary(null);
-        }
-        
-        try {
-          const discrepanciesData = await getTopDiscrepancies(5);
-          setDiscrepancies(discrepanciesData.data);
-        } catch (err) {
-          console.error('Error fetching discrepancies:', err);
-          setDiscrepancies([]);
-        }
-      } catch (err) {
-        console.error('Error fetching dashboard data:', err);
-        // Don't crash - just show the error state
-      }
-    };
-
     fetchData();
   }, [getDashboardMetrics, getDashboardSummary, getTopDiscrepancies]);
 
@@ -84,14 +118,41 @@ const Dashboard = () => {
   return (
     <div className="dashboard">
       <div className="dashboard-header">
-        <h1>Dashboard Overview</h1>
-        {metrics?.lastSync && (
-          <p className="last-sync">
-            Last sync: {formatDate(metrics.lastSync)} 
-            ({Math.round((metrics.dataAge || 0) / 60000)} minutes ago)
-          </p>
-        )}
+        <div>
+          <h1>Dashboard Overview</h1>
+          {metrics?.lastSync && (
+            <p className="last-sync">
+              Last sync: {formatDate(metrics.lastSync)} 
+              ({Math.round((metrics.dataAge || 0) / 60000)} minutes ago)
+            </p>
+          )}
+        </div>
+        <div className="dashboard-actions">
+          <button 
+            onClick={syncVindiData} 
+            disabled={syncing}
+            className={`sync-button ${syncing ? 'syncing' : ''}`}
+          >
+            {syncing ? (
+              <>
+                <RefreshCw size={16} className="spin" />
+                Syncing...
+              </>
+            ) : (
+              <>
+                <Database size={16} />
+                Sync VINDI Data
+              </>
+            )}
+          </button>
+        </div>
       </div>
+      
+      {syncMessage && (
+        <div className={`sync-message ${syncMessage.includes('Error') || syncMessage.includes('Failed') ? 'error' : 'success'}`}>
+          {syncMessage}
+        </div>
+      )}
 
       {/* Key Metrics Cards */}
       <div className="metrics-grid">

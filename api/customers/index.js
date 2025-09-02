@@ -91,90 +91,66 @@ export default async function handler(req, res) {
                 };
               }).filter(c => c.cpfCnpj && c.cpfCnpj.length >= 11); // Only valid CPF/CNPJ
 
-              // For now, return customers without VINDI data to avoid timeouts
-              // VINDI integration can be enabled via query parameter ?includeVindi=true
-              const includeVindi = req.query.includeVindi === 'true';
+              // Check if we have cached VINDI data
+              const vindiCache = global.vindiCache;
+              const vindiDataMap = new Map();
               
-              if (includeVindi && process.env.VINDI_API_KEY) {
-                // Process only first 10 customers for VINDI data to avoid timeouts
-                customerData = [];
-                const customersToProcess = sheetsCustomers.slice(0, 10);
-                
-                for (const customer of customersToProcess) {
-                  try {
-                    // Try to get VINDI data for this customer
-                    const vindiUrl = `https://app.vindi.com.br/api/v1/customers?query=registry_code:${customer.cpfCnpj}&per_page=1`;
-                    const vindiResponse = await fetch(vindiUrl, {
-                      headers: {
-                        'Authorization': `Basic ${Buffer.from(process.env.VINDI_API_KEY + ':').toString('base64')}`,
-                        'Content-Type': 'application/json'
-                      },
-                      timeout: 5000
-                    });
-                    
-                    let vindiData = null;
-                    let status = 'NO_VINDI_DATA';
-                    let paymentStatus = 'UNKNOWN';
-                    let collectedAmount = 0;
-                    
-                    if (vindiResponse.ok) {
-                      const vindiResult = await vindiResponse.json();
-                      if (vindiResult.customers && vindiResult.customers.length > 0) {
-                        vindiData = vindiResult.customers[0];
-                        status = vindiData.status || 'UNKNOWN';
-                        paymentStatus = 'PARTIALLY_PAID'; // Simplified for now
-                        collectedAmount = customer.expectedAmount * 0.8; // Simulate some payment
-                      }
-                    }
-                    
-                    const discrepancy = customer.expectedAmount - collectedAmount;
-                    const servicePaymentPercentage = customer.expectedAmount > 0 ? 
-                      (collectedAmount / customer.expectedAmount) * 100 : 0;
-                    
-                    const flags = [];
-                    if (Math.abs(discrepancy) > 1) flags.push('DISCREPANCY');
-                    if (servicePaymentPercentage === 100) flags.push('100_SERVICE');
-                    if (collectedAmount > customer.expectedAmount) flags.push('OVERPAYMENT');
-                    
-                    customerData.push({
-                      ...customer,
-                      status,
-                      paymentStatus,
-                      collectedAmount,
-                      discrepancy,
-                      servicePaymentPercentage,
-                      flags,
-                      vindiData
-                    });
-                    
-                  } catch (vindiError) {
-                    console.log(`Error fetching VINDI data for ${customer.cpfCnpj}:`, vindiError.message);
-                    // Add customer without VINDI data
-                    customerData.push({
-                      ...customer,
-                      status: 'NO_VINDI_DATA',
-                      paymentStatus: 'UNKNOWN',
-                      collectedAmount: 0,
-                      discrepancy: customer.expectedAmount,
-                      servicePaymentPercentage: 0,
-                      flags: customer.expectedAmount > 0 ? ['DISCREPANCY'] : [],
-                      vindiData: null
-                    });
-                  }
-                }
-              } else {
-                // Return customers without VINDI data for fast loading
-                customerData = sheetsCustomers.map(customer => ({
-                  ...customer,
-                  status: 'NO_VINDI_DATA',
-                  paymentStatus: 'UNKNOWN',
-                  collectedAmount: 0,
-                  discrepancy: customer.expectedAmount,
-                  servicePaymentPercentage: 0,
-                  flags: customer.expectedAmount > 0 ? ['DISCREPANCY'] : [],
-                  vindiData: null
-                }));
+              if (vindiCache && vindiCache.data) {
+                vindiCache.data.forEach(item => {
+                  vindiDataMap.set(item.cpfCnpj, item);
+                });
               }
+              
+              // Map customers with VINDI data
+              customerData = sheetsCustomers.map(customer => {
+                const vindiInfo = vindiDataMap.get(customer.cpfCnpj);
+                
+                let status = 'NO_VINDI_DATA';
+                let paymentStatus = 'UNKNOWN';
+                let collectedAmount = 0;
+                
+                if (vindiInfo && vindiInfo.vindiCustomerId) {
+                  status = vindiInfo.vindiStatus === 'active' ? 'ACTIVE' : 
+                          vindiInfo.vindiStatus === 'inactive' ? 'INACTIVE' : 
+                          vindiInfo.vindiStatus === 'archived' ? 'CANCELLED' : 'UNKNOWN';
+                  
+                  collectedAmount = vindiInfo.totalPaid || 0;
+                  
+                  // Determine payment status based on amounts
+                  if (collectedAmount >= customer.expectedAmount * 0.98) { // Allow 2% tolerance
+                    paymentStatus = 'FULLY_PAID';
+                  } else if (collectedAmount > 0) {
+                    paymentStatus = 'PARTIALLY_PAID';
+                  } else {
+                    paymentStatus = 'NO_PAYMENT';
+                  }
+                } else if (vindiInfo && vindiInfo.vindiStatus === 'NOT_FOUND') {
+                  status = 'NOT_IN_VINDI';
+                }
+                
+                const discrepancy = customer.expectedAmount - collectedAmount;
+                const servicePaymentPercentage = customer.expectedAmount > 0 ? 
+                  (collectedAmount / customer.expectedAmount) * 100 : 0;
+                
+                const flags = [];
+                if (Math.abs(discrepancy) > 10) flags.push('DISCREPANCY');
+                if (servicePaymentPercentage >= 99 && servicePaymentPercentage <= 101) flags.push('100_SERVICE');
+                if (collectedAmount > customer.expectedAmount * 1.02) flags.push('OVERPAYMENT');
+                if (vindiInfo && vindiInfo.totalPending > 0) flags.push('PENDING_PAYMENT');
+                if (status === 'CANCELLED' && collectedAmount < customer.expectedAmount) flags.push('CANCELLED_NO_FOLLOWUP');
+                
+                return {
+                  ...customer,
+                  status,
+                  paymentStatus,
+                  collectedAmount,
+                  discrepancy,
+                  servicePaymentPercentage,
+                  flags,
+                  vindiData: vindiInfo,
+                  lastSync: vindiCache?.timestamp || null
+                };
+              });
               
               break; // Found customer data, stop looking
             }

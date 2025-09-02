@@ -13,83 +13,104 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Get all sheets to find the customer data
-    const sheetNames = ['Sheet1', 'Sheet2', 'Dados', 'Customers', 'Vendas', 'Data'];
-    let customerData = [];
+    // Try different sheet names that might contain customer data
+    const possibleSheets = [
+      'Planilha1', 'Sheet1', 'Dados', 'Customers', 'Vendas', 'Data', 
+      'Clientes', 'Alunos', 'Students', 'Dashboard'
+    ];
     
-    for (const sheetName of sheetNames) {
+    let customerData = [];
+    let foundSheet = null;
+
+    for (const sheetName of possibleSheets) {
       try {
-        const sheetsUrl = `https://sheets.googleapis.com/v4/spreadsheets/${process.env.GOOGLE_SHEET_ID}/values/${sheetName}!A:Z?key=${process.env.GOOGLE_SHEETS_API_KEY}`;
+        const sheetsUrl = `https://sheets.googleapis.com/v4/spreadsheets/${process.env.GOOGLE_SHEET_ID}/values/${encodeURIComponent(sheetName)}!A:Z?key=${process.env.GOOGLE_SHEETS_API_KEY}`;
         const response = await fetch(sheetsUrl);
         
         if (response.ok) {
           const data = await response.json();
           const rows = data.values || [];
           
-          if (rows.length > 1) {
-            const headers = rows[0];
-            const dataRows = rows.slice(1);
+          if (rows.length > 10) { // Must have substantial data
+            const headers = rows[0] || [];
+            const dataRows = rows.slice(1).filter(row => row && row.some(cell => cell && cell.toString().trim()));
             
-            // Check if this looks like customer data (has CPF/CNPJ columns)
-            const hasCpfCnpj = headers.some(header => 
-              header && header.toLowerCase().includes('cpf') || 
-              header.toLowerCase().includes('cnpj') ||
-              header.toLowerCase().includes('documento')
-            );
+            // Look for sheets with customer data patterns
+            const hasCustomerData = headers.some(header => {
+              if (!header) return false;
+              const h = header.toString().toLowerCase();
+              return h.includes('cpf') || h.includes('cnpj') || h.includes('documento') || 
+                     h.includes('nome') || h.includes('email') || h.includes('cliente');
+            });
             
-            if (hasCpfCnpj) {
-              // Process this sheet as customer data
-              customerData = dataRows.map(row => {
+            if (hasCustomerData && dataRows.length > 50) { // Must have reasonable amount of customer data
+              foundSheet = sheetName;
+              
+              // Map the data more carefully
+              customerData = dataRows.map((row, index) => {
                 const customer = {};
-                headers.forEach((header, index) => {
-                  customer[header] = row[index] || '';
+                headers.forEach((header, colIndex) => {
+                  if (header && row[colIndex] !== undefined) {
+                    customer[header.toString()] = row[colIndex]?.toString() || '';
+                  }
                 });
                 
-                // Try to find CPF/CNPJ field
-                const cpfCnpjField = Object.keys(customer).find(key => 
-                  key.toLowerCase().includes('cpf') || 
-                  key.toLowerCase().includes('cnpj') ||
-                  key.toLowerCase().includes('documento')
-                );
+                // Try multiple possible field names for CPF/CNPJ
+                const cpfCnpjValue = customer['CPF/CNPJ'] || customer['CPF'] || customer['CNPJ'] || 
+                                   customer['Documento'] || customer['documento'] || customer['Doc'] ||
+                                   customer['Registry Code'] || customer['registry_code'] || '';
                 
-                const nameField = Object.keys(customer).find(key =>
-                  key.toLowerCase().includes('nome') ||
-                  key.toLowerCase().includes('name')
-                );
+                // Try multiple possible field names for name
+                const nameValue = customer['Nome'] || customer['Name'] || customer['Cliente'] || 
+                                 customer['Customer'] || customer['nome'] || customer['name'] || '';
                 
-                const amountField = Object.keys(customer).find(key =>
-                  key.toLowerCase().includes('valor') ||
-                  key.toLowerCase().includes('amount') ||
-                  key.toLowerCase().includes('total')
-                );
+                // Try multiple possible field names for amount
+                const amountValue = customer['Valor'] || customer['Amount'] || customer['Total'] || 
+                                   customer['Valor Total'] || customer['valor'] || customer['amount'] || '0';
+
+                // Parse amount
+                const expectedAmount = parseFloat(amountValue.toString().replace(/[R$\s]/g, '').replace(',', '.')) || 0;
+                
+                // Normalize CPF/CNPJ
+                const normalizedCpfCnpj = cpfCnpjValue.replace(/\D/g, '');
                 
                 return {
-                  cpfCnpj: customer[cpfCnpjField] || '',
-                  cpfCnpjFormatted: customer[cpfCnpjField] || '',
-                  customerName: customer[nameField] || '',
-                  expectedAmount: parseFloat((customer[amountField] || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0,
-                  customerType: 'B2C', // Will determine this later
+                  cpfCnpj: normalizedCpfCnpj,
+                  cpfCnpjFormatted: formatCpfCnpj(normalizedCpfCnpj),
+                  customerName: nameValue,
+                  expectedAmount: expectedAmount,
+                  customerType: normalizedCpfCnpj.length === 11 ? 'B2C' : normalizedCpfCnpj.length === 14 ? 'B2B' : 'UNKNOWN',
                   status: 'NO_VINDI_DATA',
                   paymentStatus: 'UNKNOWN',
                   collectedAmount: 0,
-                  discrepancy: 0,
+                  discrepancy: expectedAmount,
                   servicePaymentPercentage: 0,
-                  flags: []
+                  flags: expectedAmount > 0 ? ['DISCREPANCY'] : [],
+                  rawData: customer // Include raw data for debugging
                 };
-              }).filter(c => c.cpfCnpj);
+              }).filter(c => c.cpfCnpj && c.cpfCnpj.length >= 11); // Only valid CPF/CNPJ
               
               break; // Found customer data, stop looking
             }
           }
         }
       } catch (error) {
-        console.log(`Sheet ${sheetName} not found or error:`, error.message);
+        console.log(`Error checking sheet ${sheetName}:`, error.message);
       }
     }
 
-    // Apply filters from query params
+    // Apply filters
     const { status, type, paymentStatus, search, page = 1, limit = 50 } = req.query;
     let filteredCustomers = [...customerData];
+
+    if (search) {
+      const searchTerm = search.toLowerCase();
+      filteredCustomers = filteredCustomers.filter(c => 
+        c.cpfCnpj.includes(searchTerm) ||
+        c.cpfCnpjFormatted.toLowerCase().includes(searchTerm) ||
+        c.customerName.toLowerCase().includes(searchTerm)
+      );
+    }
 
     if (status) {
       filteredCustomers = filteredCustomers.filter(c => c.status === status);
@@ -97,12 +118,8 @@ export default async function handler(req, res) {
     if (type) {
       filteredCustomers = filteredCustomers.filter(c => c.customerType === type);
     }
-    if (search) {
-      const searchTerm = search.toLowerCase();
-      filteredCustomers = filteredCustomers.filter(c => 
-        c.cpfCnpj.toLowerCase().includes(searchTerm) ||
-        c.customerName.toLowerCase().includes(searchTerm)
-      );
+    if (paymentStatus) {
+      filteredCustomers = filteredCustomers.filter(c => c.paymentStatus === paymentStatus);
     }
 
     // Pagination
@@ -118,6 +135,11 @@ export default async function handler(req, res) {
         limit: parseInt(limit),
         total: filteredCustomers.length,
         pages: Math.ceil(filteredCustomers.length / limit)
+      },
+      debug: {
+        foundSheet,
+        totalRawCustomers: customerData.length,
+        sampleHeaders: customerData[0] ? Object.keys(customerData[0].rawData) : []
       }
     });
 
@@ -128,4 +150,17 @@ export default async function handler(req, res) {
       error: error.message 
     });
   }
+}
+
+function formatCpfCnpj(cpfCnpj) {
+  if (!cpfCnpj) return '';
+  const normalized = cpfCnpj.replace(/\D/g, '');
+  
+  if (normalized.length === 11) {
+    return normalized.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+  } else if (normalized.length === 14) {
+    return normalized.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+  }
+  
+  return cpfCnpj;
 }

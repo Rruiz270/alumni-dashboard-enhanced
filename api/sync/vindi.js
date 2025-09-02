@@ -91,7 +91,8 @@ export default async function handler(req, res) {
         });
         
         if (!searchResponse.ok) {
-          throw new Error(`VINDI API error: ${searchResponse.status}`);
+          const errorText = await searchResponse.text();
+          throw new Error(`VINDI API error: ${searchResponse.status} - ${errorText}`);
         }
         
         const searchData = await searchResponse.json();

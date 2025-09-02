@@ -37,12 +37,21 @@ export default async function handler(req, res) {
     const headers = rows[0] || [];
     const dataRows = rows.slice(1).filter(row => row && row.some(cell => cell && cell.toString().trim()));
     
-    // Find CPF/CNPJ column index
-    const cpfCnpjIndex = headers.findIndex(h => 
-      h && ['cpf/cnpj', 'CPF/CNPJ', 'Documento', 'documento', 'Doc'].some(term => 
-        h.toString().toLowerCase().includes(term.toLowerCase())
-      )
+    // Find CPF/CNPJ column index - look for the actual column with numbers
+    // The "Vendas" sheet has column names: 'Documento' (index 3) contains "CPF"/"CNPJ"
+    // and 'cpf/cnpj' (index 4) contains the actual numbers
+    let cpfCnpjIndex = headers.findIndex(h => 
+      h && h.toString().toLowerCase() === 'cpf/cnpj'
     );
+    
+    // If not found, try other common names
+    if (cpfCnpjIndex === -1) {
+      cpfCnpjIndex = headers.findIndex(h => 
+        h && ['CPF/CNPJ', 'Registry Code', 'registry_code'].some(term => 
+          h.toString() === term
+        )
+      );
+    }
     
     if (cpfCnpjIndex === -1) {
       return res.status(400).json({

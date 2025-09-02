@@ -1,34 +1,3 @@
-const { google } = require('googleapis');
-
-// Helper functions
-function normalizeDocument(doc) {
-  if (!doc) return '';
-  return doc.replace(/\D/g, '');
-}
-
-function parseAmount(value) {
-  if (typeof value === 'number') return value;
-  if (typeof value === 'string') {
-    const cleaned = value.replace(/[R$\s]/g, '').replace(',', '.');
-    return parseFloat(cleaned) || 0;
-  }
-  return 0;
-}
-
-async function getGoogleSheetsData() {
-  const sheets = google.sheets({ 
-    version: 'v4', 
-    auth: process.env.GOOGLE_SHEETS_API_KEY 
-  });
-
-  const response = await sheets.spreadsheets.values.get({
-    spreadsheetId: process.env.GOOGLE_SHEET_ID,
-    range: 'A:Z',
-  });
-
-  return response.data.values || [];
-}
-
 export default async function handler(req, res) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -44,39 +13,51 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Only get Google Sheets data for now
-    const sheetsData = await getGoogleSheetsData();
-
-    // Process sheets data
-    const headers = sheetsData[0] || [];
-    const rows = sheetsData.slice(1);
+    // Get Google Sheets data directly
+    const sheetsUrl = `https://sheets.googleapis.com/v4/spreadsheets/${process.env.GOOGLE_SHEET_ID}/values/A:Z?key=${process.env.GOOGLE_SHEETS_API_KEY}`;
+    const response = await fetch(sheetsUrl);
     
-    const processedSheets = rows.map(row => {
-      const obj = {};
-      headers.forEach((header, index) => {
-        obj[header] = row[index] || '';
-      });
-      return {
-        cpfCnpj: normalizeDocument(obj.cpf_cnpj || obj.CPF_CNPJ || obj['CPF/CNPJ'] || ''),
-        customerName: obj.nome || obj.Nome || obj.name || obj.Name || '',
-        expectedAmount: parseAmount(obj.valor || obj.Valor || obj.amount || obj.Amount || 0),
-      };
-    }).filter(customer => customer.cpfCnpj);
+    if (!response.ok) {
+      throw new Error(`Google Sheets API error: ${response.status} ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    const rows = data.values || [];
 
-    // Basic metrics from Google Sheets only
+    // Find data rows (skip empty rows)
+    const dataRows = rows.filter(row => row && row.some(cell => cell && cell.trim()));
+    
+    // Simple metrics based on available data
     const metrics = {
-      totalCustomers: processedSheets.length,
-      totalB2C: processedSheets.filter(c => normalizeDocument(c.cpfCnpj).length === 11).length,
-      totalB2B: processedSheets.filter(c => normalizeDocument(c.cpfCnpj).length === 14).length,
-      totalExpected: processedSheets.reduce((sum, c) => sum + c.expectedAmount, 0),
+      totalCustomers: Math.max(0, dataRows.length - 1), // Subtract header row
+      totalB2C: 0,
+      totalB2B: 0,
+      totalExpected: 0,
       fullyPaidCount: 0,
       partiallyPaidCount: 0,
-      noPaymentCount: processedSheets.length,
+      noPaymentCount: 0,
       discrepancyCount: 0,
       delinquentCount: 0,
       lastSync: new Date().toISOString(),
-      dataAge: 0
+      dataAge: 0,
+      rawDataRows: dataRows.length,
+      rawHeaders: rows[0] || []
     };
+
+    // Try to extract some basic numbers from the data
+    dataRows.forEach(row => {
+      row.forEach(cell => {
+        if (cell && typeof cell === 'string') {
+          // Look for numbers that might be customer counts or amounts
+          const num = parseFloat(cell.replace(/[^\d.,]/g, '').replace(',', '.'));
+          if (!isNaN(num) && num > 0) {
+            if (num < 10000) { // Likely a customer count
+              metrics.totalCustomers = Math.max(metrics.totalCustomers, num);
+            }
+          }
+        }
+      });
+    });
 
     res.json({
       success: true,

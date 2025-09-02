@@ -1,82 +1,3 @@
-const { google } = require('googleapis');
-const axios = require('axios');
-
-// Helper functions
-function normalizeDocument(doc) {
-  if (!doc) return '';
-  return doc.replace(/\D/g, '');
-}
-
-function parseAmount(value) {
-  if (typeof value === 'number') return value;
-  if (typeof value === 'string') {
-    const cleaned = value.replace(/[R$\s]/g, '').replace(',', '.');
-    return parseFloat(cleaned) || 0;
-  }
-  return 0;
-}
-
-function formatCPFCNPJ(cpfCnpj) {
-  const normalized = normalizeDocument(cpfCnpj);
-  if (normalized.length === 11) {
-    return normalized.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
-  } else if (normalized.length === 14) {
-    return normalized.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
-  }
-  return cpfCnpj;
-}
-
-function getCustomerType(cpfCnpj) {
-  const normalized = normalizeDocument(cpfCnpj);
-  return normalized.length === 11 ? 'B2C' : normalized.length === 14 ? 'B2B' : 'INVALID';
-}
-
-async function getGoogleSheetsData() {
-  const sheets = google.sheets({ 
-    version: 'v4', 
-    auth: process.env.GOOGLE_SHEETS_API_KEY 
-  });
-
-  const response = await sheets.spreadsheets.values.get({
-    spreadsheetId: process.env.GOOGLE_SHEET_ID,
-    range: 'A:Z',
-  });
-
-  return response.data.values || [];
-}
-
-async function getVindiCustomers() {
-  try {
-    const response = await axios.get(`${process.env.VINDI_API_URL}/customers`, {
-      headers: {
-        'Authorization': `Basic ${Buffer.from(process.env.VINDI_API_KEY + ':').toString('base64')}`,
-      },
-      params: { per_page: 100 }
-    });
-
-    return response.data.customers || [];
-  } catch (error) {
-    console.error('VINDI API Error:', error.response?.data || error.message);
-    return [];
-  }
-}
-
-async function getVindiCustomerBills(customerId) {
-  try {
-    const response = await axios.get(`${process.env.VINDI_API_URL}/bills`, {
-      headers: {
-        'Authorization': `Basic ${Buffer.from(process.env.VINDI_API_KEY + ':').toString('base64')}`,
-      },
-      params: { customer_id: customerId, per_page: 50 }
-    });
-
-    return response.data.bills || [];
-  } catch (error) {
-    console.error('VINDI Bills API Error:', error.response?.data || error.message);
-    return [];
-  }
-}
-
 export default async function handler(req, res) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -92,77 +13,83 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Get data from both sources
-    const [sheetsData, vindiCustomers] = await Promise.all([
-      getGoogleSheetsData(),
-      getVindiCustomers()
-    ]);
-
-    // Process sheets data
-    const headers = sheetsData[0] || [];
-    const rows = sheetsData.slice(1);
+    // Get all sheets to find the customer data
+    const sheetNames = ['Sheet1', 'Sheet2', 'Dados', 'Customers', 'Vendas', 'Data'];
+    let customerData = [];
     
-    const processedSheets = rows.map(row => {
-      const obj = {};
-      headers.forEach((header, index) => {
-        obj[header] = row[index] || '';
-      });
-      return {
-        cpfCnpj: normalizeDocument(obj.cpf_cnpj || obj.CPF_CNPJ || obj['CPF/CNPJ'] || ''),
-        customerName: obj.nome || obj.Nome || obj.name || obj.Name || '',
-        expectedAmount: parseAmount(obj.valor || obj.Valor || obj.amount || obj.Amount || 0),
-        serviceAmount: parseAmount(obj.valor_servico || obj['Valor Serviço'] || 0),
-        productAmount: parseAmount(obj.valor_produto || obj['Valor Produto'] || 0),
-      };
-    }).filter(customer => customer.cpfCnpj);
-
-    // Process VINDI customers
-    const vindiMap = new Map();
-    for (const customer of vindiCustomers) {
-      const cpfCnpj = normalizeDocument(customer.registry_code || '');
-      if (cpfCnpj) {
-        // Get bills for this customer
-        const bills = await getVindiCustomerBills(customer.id);
-        const totalPaid = bills
-          .filter(bill => bill.status === 'paid')
-          .reduce((sum, bill) => sum + parseFloat(bill.amount || 0), 0);
-
-        vindiMap.set(cpfCnpj, {
-          id: customer.id,
-          name: customer.name,
-          email: customer.email,
-          status: customer.status,
-          totalPaid,
-          bills
-        });
+    for (const sheetName of sheetNames) {
+      try {
+        const sheetsUrl = `https://sheets.googleapis.com/v4/spreadsheets/${process.env.GOOGLE_SHEET_ID}/values/${sheetName}!A:Z?key=${process.env.GOOGLE_SHEETS_API_KEY}`;
+        const response = await fetch(sheetsUrl);
+        
+        if (response.ok) {
+          const data = await response.json();
+          const rows = data.values || [];
+          
+          if (rows.length > 1) {
+            const headers = rows[0];
+            const dataRows = rows.slice(1);
+            
+            // Check if this looks like customer data (has CPF/CNPJ columns)
+            const hasCpfCnpj = headers.some(header => 
+              header && header.toLowerCase().includes('cpf') || 
+              header.toLowerCase().includes('cnpj') ||
+              header.toLowerCase().includes('documento')
+            );
+            
+            if (hasCpfCnpj) {
+              // Process this sheet as customer data
+              customerData = dataRows.map(row => {
+                const customer = {};
+                headers.forEach((header, index) => {
+                  customer[header] = row[index] || '';
+                });
+                
+                // Try to find CPF/CNPJ field
+                const cpfCnpjField = Object.keys(customer).find(key => 
+                  key.toLowerCase().includes('cpf') || 
+                  key.toLowerCase().includes('cnpj') ||
+                  key.toLowerCase().includes('documento')
+                );
+                
+                const nameField = Object.keys(customer).find(key =>
+                  key.toLowerCase().includes('nome') ||
+                  key.toLowerCase().includes('name')
+                );
+                
+                const amountField = Object.keys(customer).find(key =>
+                  key.toLowerCase().includes('valor') ||
+                  key.toLowerCase().includes('amount') ||
+                  key.toLowerCase().includes('total')
+                );
+                
+                return {
+                  cpfCnpj: customer[cpfCnpjField] || '',
+                  cpfCnpjFormatted: customer[cpfCnpjField] || '',
+                  customerName: customer[nameField] || '',
+                  expectedAmount: parseFloat((customer[amountField] || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0,
+                  customerType: 'B2C', // Will determine this later
+                  status: 'NO_VINDI_DATA',
+                  paymentStatus: 'UNKNOWN',
+                  collectedAmount: 0,
+                  discrepancy: 0,
+                  servicePaymentPercentage: 0,
+                  flags: []
+                };
+              }).filter(c => c.cpfCnpj);
+              
+              break; // Found customer data, stop looking
+            }
+          }
+        }
+      } catch (error) {
+        console.log(`Sheet ${sheetName} not found or error:`, error.message);
       }
     }
 
-    // Match data
-    const matchedCustomers = processedSheets.map(sheetCustomer => {
-      const vindiData = vindiMap.get(sheetCustomer.cpfCnpj);
-      const collectedAmount = vindiData?.totalPaid || 0;
-      const discrepancy = sheetCustomer.expectedAmount - collectedAmount;
-
-      return {
-        cpfCnpj: sheetCustomer.cpfCnpj,
-        cpfCnpjFormatted: formatCPFCNPJ(sheetCustomer.cpfCnpj),
-        customerType: getCustomerType(sheetCustomer.cpfCnpj),
-        sheetsData: sheetCustomer,
-        vindiData: vindiData || null,
-        expectedAmount: sheetCustomer.expectedAmount,
-        collectedAmount,
-        discrepancy,
-        status: vindiData ? (vindiData.status === 'active' ? 'ACTIVE' : 'CANCELLED') : 'NO_VINDI_DATA',
-        paymentStatus: collectedAmount >= sheetCustomer.expectedAmount ? 'FULLY_PAID' : 
-                      collectedAmount > 0 ? 'PARTIALLY_PAID' : 'NO_PAYMENT',
-        flags: discrepancy !== 0 ? ['DISCREPANCY'] : []
-      };
-    });
-
-    // Apply filters
+    // Apply filters from query params
     const { status, type, paymentStatus, search, page = 1, limit = 50 } = req.query;
-    let filteredCustomers = [...matchedCustomers];
+    let filteredCustomers = [...customerData];
 
     if (status) {
       filteredCustomers = filteredCustomers.filter(c => c.status === status);
@@ -170,15 +97,11 @@ export default async function handler(req, res) {
     if (type) {
       filteredCustomers = filteredCustomers.filter(c => c.customerType === type);
     }
-    if (paymentStatus) {
-      filteredCustomers = filteredCustomers.filter(c => c.paymentStatus === paymentStatus);
-    }
     if (search) {
       const searchTerm = search.toLowerCase();
       filteredCustomers = filteredCustomers.filter(c => 
-        c.cpfCnpj.includes(searchTerm) ||
-        c.sheetsData?.customerName?.toLowerCase().includes(searchTerm) ||
-        c.vindiData?.name?.toLowerCase().includes(searchTerm)
+        c.cpfCnpj.toLowerCase().includes(searchTerm) ||
+        c.customerName.toLowerCase().includes(searchTerm)
       );
     }
 

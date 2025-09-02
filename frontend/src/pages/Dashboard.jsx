@@ -20,17 +20,29 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [metricsData, summaryData, discrepanciesData] = await Promise.all([
-          getDashboardMetrics(),
-          getDashboardSummary(), 
-          getTopDiscrepancies(5)
-        ]);
-        
+        // Fetch metrics first as it's the most important
+        const metricsData = await getDashboardMetrics();
         setMetrics(metricsData.data);
-        setSummary(summaryData.data);
-        setDiscrepancies(discrepanciesData.data);
+        
+        // Then try to fetch summary and discrepancies
+        try {
+          const summaryData = await getDashboardSummary();
+          setSummary(summaryData.data);
+        } catch (err) {
+          console.error('Error fetching summary:', err);
+          setSummary(null);
+        }
+        
+        try {
+          const discrepanciesData = await getTopDiscrepancies(5);
+          setDiscrepancies(discrepanciesData.data);
+        } catch (err) {
+          console.error('Error fetching discrepancies:', err);
+          setDiscrepancies([]);
+        }
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
+        // Don't crash - just show the error state
       }
     };
 
@@ -51,7 +63,7 @@ const Dashboard = () => {
       <div className="error-container">
         <AlertTriangle size={48} />
         <h2>Error Loading Dashboard</h2>
-        <p>{error}</p>
+        <p>{typeof error === 'string' ? error : error?.message || 'An error occurred'}</p>
         <p>Make sure to sync data first using the "Sync Data" button.</p>
       </div>
     );

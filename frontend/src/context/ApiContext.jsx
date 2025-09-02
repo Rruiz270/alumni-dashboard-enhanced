@@ -35,7 +35,7 @@ export const ApiProvider = ({ children }) => {
       const response = await apiCall();
       return response.data;
     } catch (err) {
-      const errorMessage = err.response?.data?.error || err.message;
+      const errorMessage = err.response?.data?.error || err.message || 'Network error occurred';
       setError(errorMessage);
       throw new Error(errorMessage);
     } finally {
@@ -105,7 +105,7 @@ export const ApiProvider = ({ children }) => {
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      const errorMessage = err.response?.data?.error || err.message;
+      const errorMessage = err.response?.data?.error || err.message || 'Network error occurred';
       setError(errorMessage);
       throw new Error(errorMessage);
     }

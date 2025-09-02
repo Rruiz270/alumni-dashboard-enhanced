@@ -39,13 +39,19 @@ export default async function handler(req, res) {
     
     // Find CPF/CNPJ column index
     const cpfCnpjIndex = headers.findIndex(h => 
-      h && ['cpf/cnpj', 'CPF/CNPJ', 'Documento', 'documento'].includes(h.toString())
+      h && ['cpf/cnpj', 'CPF/CNPJ', 'Documento', 'documento', 'Doc'].some(term => 
+        h.toString().toLowerCase().includes(term.toLowerCase())
+      )
     );
     
     if (cpfCnpjIndex === -1) {
       return res.status(400).json({
         success: false,
-        error: 'CPF/CNPJ column not found in spreadsheet'
+        error: 'CPF/CNPJ column not found in spreadsheet',
+        debug: {
+          headers: headers.slice(0, 10),
+          totalRows: rows.length
+        }
       });
     }
 

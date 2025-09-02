@@ -56,11 +56,21 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Get data from both sources
-    const [sheetsData, vindiCustomers] = await Promise.all([
-      getGoogleSheetsData(),
-      getVindiCustomers()
-    ]);
+    // Get data from both sources with error handling
+    let sheetsData = [];
+    let vindiCustomers = [];
+    
+    try {
+      sheetsData = await getGoogleSheetsData();
+    } catch (error) {
+      console.error('Google Sheets error:', error);
+    }
+    
+    try {
+      vindiCustomers = await getVindiCustomers();
+    } catch (error) {
+      console.error('VINDI error:', error);
+    }
 
     // Process sheets data
     const headers = sheetsData[0] || [];

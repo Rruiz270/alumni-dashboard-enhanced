@@ -24,13 +24,15 @@ const Customers = () => {
     flag: ''
   });
   const [currentPage, setCurrentPage] = useState(1);
+  const [includeVindi, setIncludeVindi] = useState(true);
 
   const fetchCustomers = async (page = 1) => {
     try {
       const params = {
         ...filters,
         page,
-        limit: 20
+        limit: 20,
+        includeVindi: includeVindi
       };
       
       // Remove empty filters
@@ -49,7 +51,7 @@ const Customers = () => {
 
   useEffect(() => {
     fetchCustomers(1);
-  }, [filters]);
+  }, [filters, includeVindi]);
 
   const handleFilterChange = (key, value) => {
     setFilters(prev => ({ ...prev, [key]: value }));

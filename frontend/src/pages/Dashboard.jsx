@@ -51,27 +51,13 @@ const Dashboard = () => {
 
   const syncVindiData = async () => {
     setSyncing(true);
-    setSyncMessage('Syncing VINDI data...');
+    setSyncMessage('Loading VINDI data...');
     
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/sync/vindi`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        setSyncMessage(`Successfully synced ${data.stats.success} customers with VINDI`);
-        // Refresh dashboard data after sync
-        await fetchData();
-      } else {
-        setSyncMessage('Error syncing VINDI data: ' + data.error);
-      }
+      // Force refresh customers with VINDI data
+      window.location.href = '/customers';
     } catch (err) {
-      setSyncMessage('Failed to sync VINDI data: ' + err.message);
+      setSyncMessage('Failed to load VINDI data: ' + err.message);
     } finally {
       setSyncing(false);
       // Clear message after 5 seconds
@@ -141,7 +127,7 @@ const Dashboard = () => {
             ) : (
               <>
                 <Database size={16} />
-                Sync VINDI Data
+                Load VINDI Data
               </>
             )}
           </button>

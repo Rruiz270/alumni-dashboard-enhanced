@@ -1,5 +1,4 @@
 const { google } = require('googleapis');
-const axios = require('axios');
 
 // Helper functions
 function normalizeDocument(doc) {
@@ -30,30 +29,6 @@ async function getGoogleSheetsData() {
   return response.data.values || [];
 }
 
-async function getVindiCustomers() {
-  try {
-    const response = await axios.get(`${process.env.VINDI_API_URL}/customers`, {
-      headers: {
-        'Authorization': `Basic ${Buffer.from(process.env.VINDI_API_KEY + ':').toString('base64')}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      params: { per_page: 100 },
-      timeout: 10000
-    });
-
-    return response.data.customers || [];
-  } catch (error) {
-    console.error('VINDI API detailed error:', {
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data,
-      message: error.message
-    });
-    throw error;
-  }
-}
-
 export default async function handler(req, res) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -69,23 +44,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Get data from both sources with error handling
-    let sheetsData = [];
-    let vindiCustomers = [];
-    
-    try {
-      sheetsData = await getGoogleSheetsData();
-    } catch (error) {
-      console.error('Google Sheets error:', error);
-    }
-    
-    try {
-      vindiCustomers = await getVindiCustomers();
-    } catch (error) {
-      console.error('VINDI error:', error);
-      // Continue without VINDI data for now
-      vindiCustomers = [];
-    }
+    // Only get Google Sheets data for now
+    const sheetsData = await getGoogleSheetsData();
 
     // Process sheets data
     const headers = sheetsData[0] || [];
@@ -103,14 +63,19 @@ export default async function handler(req, res) {
       };
     }).filter(customer => customer.cpfCnpj);
 
-    // Basic metrics
+    // Basic metrics from Google Sheets only
     const metrics = {
       totalCustomers: processedSheets.length,
       totalB2C: processedSheets.filter(c => normalizeDocument(c.cpfCnpj).length === 11).length,
       totalB2B: processedSheets.filter(c => normalizeDocument(c.cpfCnpj).length === 14).length,
       totalExpected: processedSheets.reduce((sum, c) => sum + c.expectedAmount, 0),
-      vindiCustomersCount: vindiCustomers.length,
-      lastSync: new Date().toISOString()
+      fullyPaidCount: 0,
+      partiallyPaidCount: 0,
+      noPaymentCount: processedSheets.length,
+      discrepancyCount: 0,
+      delinquentCount: 0,
+      lastSync: new Date().toISOString(),
+      dataAge: 0
     };
 
     res.json({
@@ -122,7 +87,7 @@ export default async function handler(req, res) {
     console.error('API Error:', error);
     res.status(500).json({ 
       success: false, 
-      error: error.message 
+      error: error.message || 'Server error occurred'
     });
   }
 }

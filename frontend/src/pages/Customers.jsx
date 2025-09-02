@@ -200,7 +200,7 @@ const Customers = () => {
             {customers.map((customer, index) => (
               <tr key={customer.cpfCnpj || index}>
                 <td className="mono">{customer.cpfCnpjFormatted}</td>
-                <td>{customer.sheetsData?.customerName || customer.vindiData?.name || '-'}</td>
+                <td>{customer.customerName || customer.sheetsData?.customerName || customer.vindiData?.name || '-'}</td>
                 <td>
                   <span className={`type-badge ${customer.customerType.toLowerCase()}`}>
                     {customer.customerType}

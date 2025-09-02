@@ -36,6 +36,35 @@ export default async function handler(req, res) {
     });
     
     const searchData = await searchResponse.json();
+    
+    // If customer found, also check their bills
+    let billsInfo = null;
+    if (searchData.customers?.length > 0) {
+      const customerId = searchData.customers[0].id;
+      const billsUrl = `https://app.vindi.com.br/api/v1/bills?customer_id=${customerId}&per_page=10`;
+      
+      const billsResponse = await fetch(billsUrl, {
+        headers: {
+          'Authorization': `Basic ${Buffer.from(process.env.VINDI_API_KEY + ':').toString('base64')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const billsData = await billsResponse.json();
+      const paidBills = billsData.bills?.filter(bill => bill.status === 'paid') || [];
+      const totalPaid = paidBills.reduce((sum, bill) => sum + (bill.amount || 0), 0) / 100;
+      
+      billsInfo = {
+        totalBills: billsData.bills?.length || 0,
+        paidBills: paidBills.length,
+        totalPaidAmount: totalPaid,
+        billStatuses: billsData.bills?.map(b => ({ 
+          id: b.id, 
+          status: b.status, 
+          amount: b.amount / 100 
+        }))
+      };
+    }
 
     res.json({
       success: true,
@@ -49,7 +78,8 @@ export default async function handler(req, res) {
         cpfSearched: testCpf,
         status: searchResponse.status,
         found: searchData.customers?.length > 0,
-        customerData: searchData.customers?.[0] || null
+        customerData: searchData.customers?.[0] || null,
+        billsInfo
       },
       timestamp: new Date().toISOString()
     });

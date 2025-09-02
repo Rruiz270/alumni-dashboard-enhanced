@@ -31,14 +31,27 @@ async function getGoogleSheetsData() {
 }
 
 async function getVindiCustomers() {
-  const response = await axios.get(`${process.env.VINDI_API_URL}/customers`, {
-    headers: {
-      'Authorization': `Basic ${Buffer.from(process.env.VINDI_API_KEY + ':').toString('base64')}`,
-    },
-    params: { per_page: 100 }
-  });
+  try {
+    const response = await axios.get(`${process.env.VINDI_API_URL}/customers`, {
+      headers: {
+        'Authorization': `Basic ${Buffer.from(process.env.VINDI_API_KEY + ':').toString('base64')}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      params: { per_page: 100 },
+      timeout: 10000
+    });
 
-  return response.data.customers || [];
+    return response.data.customers || [];
+  } catch (error) {
+    console.error('VINDI API detailed error:', {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      message: error.message
+    });
+    throw error;
+  }
 }
 
 export default async function handler(req, res) {
@@ -70,6 +83,8 @@ export default async function handler(req, res) {
       vindiCustomers = await getVindiCustomers();
     } catch (error) {
       console.error('VINDI error:', error);
+      // Continue without VINDI data for now
+      vindiCustomers = [];
     }
 
     // Process sheets data

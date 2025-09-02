@@ -24,7 +24,7 @@ export default async function handler(req, res) {
     // Get limit from query params (default 50)
     const limit = parseInt(req.query.limit) || 50;
     
-    // First, get all CPF/CNPJs from Google Sheets
+    // First, get all CPF/CNPJs from Google Sheets - specifically from Vendas sheet
     const sheetsUrl = `https://sheets.googleapis.com/v4/spreadsheets/${process.env.GOOGLE_SHEET_ID}/values/Vendas!A:Z?key=${process.env.GOOGLE_SHEETS_API_KEY}`;
     const sheetsResponse = await fetch(sheetsUrl);
     
@@ -174,7 +174,14 @@ export default async function handler(req, res) {
       success: true,
       message: `Synced ${successCount} customers with VINDI`,
       stats: global.vindiCache.stats,
-      timestamp: global.vindiCache.timestamp
+      timestamp: global.vindiCache.timestamp,
+      debug: {
+        totalRows: rows.length,
+        dataRows: dataRows.length,
+        cpfCnpjIndex,
+        processedCount: processedCpfs.size,
+        firstFewCpfs: Array.from(processedCpfs).slice(0, 3)
+      }
     });
 
   } catch (error) {

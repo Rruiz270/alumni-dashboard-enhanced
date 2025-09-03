@@ -90,6 +90,7 @@ export interface DashboardSummary {
   // Operations
   pendingAccess: number;
   avgDaysToAccess: string;
+  avg_renewals_per_customer: number;
   
   // Vindi match
   customersWithVindiMatch: number;

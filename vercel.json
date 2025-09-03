@@ -9,7 +9,6 @@
     }
   },
   "env": {
-    "VINDI_API_KEY": "@vindi_api_key",
     "VINDI_API_URL": "https://app.vindi.com.br/api/v1"
   },
   "rewrites": [

@@ -1,0 +1,10 @@
+{
+  "buildCommand": "npm run build",
+  "installCommand": "npm install",
+  "devCommand": "npm run dev",
+  "functions": {
+    "pages/api/**/*.ts": {
+      "runtime": "@vercel/node"
+    }
+  }
+}

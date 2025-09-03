@@ -1,5 +1,5 @@
 {
-  "name": "alumni-dashboard-enhanced",
+  "name": "alumni-dashboard-enhanced2",
   "version": "2.0.0",
   "description": "Alumni by Better - Enhanced Vindi & Google Sheets Reconciliation Dashboard",
   "private": true,
@@ -7,46 +7,30 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "type-check": "tsc --noEmit",
-    "export": "next export"
+    "lint": "next lint"
   },
   "dependencies": {
-    "next": "^14.0.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "lucide-react": "^0.263.1",
-    "@types/node": "^20.0.0",
-    "@types/react": "^18.2.0",
-    "@types/react-dom": "^18.2.0",
-    "typescript": "^5.0.0"
+    "next": "14.2.5",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "lucide-react": "0.263.1"
   },
   "devDependencies": {
-    "tailwindcss": "^3.3.0",
-    "postcss": "^8.4.24",
-    "autoprefixer": "^10.4.14",
-    "@vercel/node": "^5.3.17"
+    "@types/node": "20.14.10",
+    "@types/react": "18.3.3",
+    "@types/react-dom": "18.3.0",
+    "typescript": "5.5.3",
+    "tailwindcss": "3.4.4",
+    "postcss": "8.4.39",
+    "autoprefixer": "10.4.19",
+    "@vercel/node": "3.2.0"
   },
   "keywords": [
     "dashboard",
-    "vindi",
-    "sales",
+    "vindi", 
     "analytics",
-    "google-sheets",
-    "payment-tracking",
-    "reconciliation",
-    "next.js",
-    "typescript",
-    "alumni",
-    "better-education"
+    "next.js"
   ],
   "author": "Alumni by Better",
-  "license": "MIT",
-  "engines": {
-    "node": ">=18.0.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/Rruiz270/alumni-dashboard-enhanced.git"
-  }
+  "license": "MIT"
 }

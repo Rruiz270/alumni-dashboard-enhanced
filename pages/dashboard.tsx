@@ -1,5 +1,5 @@
-import EnhancedDashboard from '../src/components/EnhancedDashboard'
+import SimpleDashboard from '../src/components/SimpleDashboard'
 
 export default function Dashboard() {
-  return <EnhancedDashboard />
+  return <SimpleDashboard />
 }

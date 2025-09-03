@@ -1,20 +1,5 @@
 {
-  "buildCommand": "npm run build",
-  "outputDirectory": ".next",
-  "installCommand": "npm install",
-  "devCommand": "npm run dev",
-  "functions": {
-    "pages/api/**/*.ts": {
-      "runtime": "nodejs20.x"
-    }
-  },
   "env": {
     "VINDI_API_URL": "https://app.vindi.com.br/api/v1"
-  },
-  "rewrites": [
-    {
-      "source": "/api/:path*",
-      "destination": "/api/:path*"
-    }
-  ]
+  }
 }

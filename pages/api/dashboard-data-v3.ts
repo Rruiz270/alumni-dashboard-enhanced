@@ -288,7 +288,7 @@ async function processAllData(forceRefresh = false): Promise<APIResponse> {
           lastUpdate: new Date().toISOString(),
           cacheAge: 0,
           cacheSize: database.getCacheSize(),
-          isIncremental
+          isIncremental: Boolean(isIncremental)
         }
       },
       debugInfo: {

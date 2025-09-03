@@ -167,7 +167,9 @@ async function processAllData(forceRefresh = false): Promise<APIResponse> {
     const sheetsData = await fetchGoogleSheetsData();
     
     // Fetch Vindi data (incremental if possible)
-    let vindiCustomers, vindiBills, vindiSubscriptions;
+    let vindiCustomers: any[] = [];
+    let vindiBills: any[] = [];
+    let vindiSubscriptions: any[] = [];
     
     if (isIncremental) {
       console.log('🔄 Performing incremental Vindi data fetch');
